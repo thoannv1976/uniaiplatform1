@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "agentGuidance": false,
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "test:emulator": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": [
+        "FIRESTORE_EMULATOR_HOST",
+        "FIREBASE_AUTH_EMULATOR_HOST",
+        "FIREBASE_STORAGE_EMULATOR_HOST",
+        "GCLOUD_PROJECT"
+      ]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

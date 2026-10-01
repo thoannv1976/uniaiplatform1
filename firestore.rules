@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// The browser never talks to Firestore directly: every read and write goes through
+// the API (Admin SDK bypasses these rules). Keep this deny-all.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

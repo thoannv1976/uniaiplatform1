@@ -1,0 +1,29 @@
+{
+  "name": "@uniai/firestore",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:emulator": "vitest run --config vitest.emulator.config.ts",
+    "seed": "node dist/seed.js"
+  },
+  "dependencies": {
+    "@uniai/shared": "workspace:*",
+    "firebase-admin": "^14.5.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0"
+  }
+}

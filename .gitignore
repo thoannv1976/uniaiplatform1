@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+*.log
+.env
+.env.*
+!.env.example
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+database-debug.log*
+pubsub-debug.log*
+emulator-data/
+# Playwright
+test-results/
+playwright-report/
+# Service account keys must never be committed
+*-sa.json
+service-account*.json
