@@ -1,49 +1,24 @@
-import type { MeResponse } from '@uniai/shared';
-import { useEffect, useState } from 'react';
-import { fetchMe } from '../lib/api';
+import { ROLE_LABELS_VI, USER_STATUS_LABELS_VI } from '@uniai/shared';
+import { useState } from 'react';
+import type { ProfileState } from '../auth/AuthProvider';
 import { EMAIL_DOMAIN } from '../lib/config';
 
-export interface AccountUser {
-  email: string | null;
-  getIdToken: () => Promise<string>;
-}
-
 interface Props {
-  user: AccountUser | null | undefined;
+  /** undefined while the session is restored; null when signed out. */
+  signedIn: boolean | undefined;
+  profile: ProfileState;
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
-  loadMe?: typeof fetchMe;
 }
-
-type MeResult = { kind: 'ok'; me: MeResponse } | { kind: 'error'; message: string };
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-export function AccountPanel({ user, onSignIn, onSignOut, loadMe = fetchMe }: Props) {
-  // The result is tagged with the user it belongs to; a different user means "loading".
-  const [result, setResult] = useState<{ user: AccountUser; value: MeResult } | null>(null);
+export function AccountPanel({ signedIn, profile, onSignIn, onSignOut }: Props) {
   const [signInError, setSignInError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    const controller = new AbortController();
-    user
-      .getIdToken()
-      .then((token) => loadMe(token, controller.signal))
-      .then((data) => setResult({ user, value: { kind: 'ok', me: data } }))
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setResult({ user, value: { kind: 'error', message: errorMessage(err) } });
-      });
-    return () => controller.abort();
-  }, [user, loadMe]);
+  if (signedIn === undefined) return <p>Đang kiểm tra phiên đăng nhập…</p>;
 
-  const me: MeResult | { kind: 'loading' } =
-    user && result?.user === user ? result.value : { kind: 'loading' };
-
-  if (user === undefined) return <p>Đang kiểm tra phiên đăng nhập…</p>;
-
-  if (user === null) {
+  if (!signedIn) {
     return (
       <div className="flex flex-col items-start gap-2">
         <button
@@ -68,16 +43,34 @@ export function AccountPanel({ user, onSignIn, onSignOut, loadMe = fetchMe }: Pr
 
   return (
     <div className="flex flex-col items-start gap-2">
-      {me.kind === 'loading' && <p>Đang xác thực với máy chủ…</p>}
-      {me.kind === 'ok' && (
-        <p>
-          Xin chào <strong>{me.me.name ?? me.me.email}</strong> ({me.me.email})
+      {profile.kind === 'loading' && <p>Đang xác thực với máy chủ…</p>}
+      {profile.kind === 'error' && (
+        <p role="alert" className="text-red-700">
+          {profile.message}
         </p>
       )}
-      {me.kind === 'error' && (
-        <p role="alert" className="text-red-700">
-          {me.message}
-        </p>
+      {profile.kind === 'ok' && (
+        <>
+          <p>
+            Xin chào <strong>{profile.profile.name ?? profile.profile.email}</strong> (
+            {profile.profile.email})
+          </p>
+          <p className="text-sm text-slate-600">
+            Vai trò: {ROLE_LABELS_VI[profile.profile.role]} · Trạng thái:{' '}
+            {USER_STATUS_LABELS_VI[profile.profile.status]}
+          </p>
+          {profile.profile.status === 'pending' && (
+            <p role="alert" className="rounded bg-amber-50 p-2 text-sm text-amber-900">
+              Tài khoản của bạn đang chờ quản trị viên duyệt. Bạn sẽ dùng được hệ thống sau khi được
+              duyệt.
+            </p>
+          )}
+          {profile.profile.status === 'locked' && (
+            <p role="alert" className="rounded bg-red-50 p-2 text-sm text-red-800">
+              Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.
+            </p>
+          )}
+        </>
       )}
       <button
         type="button"

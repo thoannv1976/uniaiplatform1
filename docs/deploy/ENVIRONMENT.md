@@ -2,7 +2,7 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: M1 (01/10/2026) – mã đã sẵn sàng, **chờ Cowork chạy `infra/bootstrap.sh`**.
+Cập nhật lần cuối: M2 (01/10/2026) – M1 đã merge, **chờ Cowork chạy `infra/bootstrap.sh`** (Issue #2); M2 thêm dữ liệu, không thêm tài nguyên.
 Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 
 ## Google Cloud – project `uniaiplatform1` (số 278562969448), vùng `asia-southeast1`
@@ -18,6 +18,16 @@ Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 | Service account             | `uniai-api`, `uniai-worker`, `github-deployer`                                  | (dùng chung)         | bootstrap        | Chờ        |
 | Workload Identity           | pool `github`, provider `github-oidc` (repo này, `main` + tag `v*`)             |                      | bootstrap        | Chờ        |
 | Secret Manager              | `openai-api-key`, `gemini-api-key`, `anthropic-api-key` (rỗng, Admin nhập ở M4) |                      | bootstrap        | Chờ        |
+
+### Dữ liệu Firestore (M2, xem ADR 0003)
+
+| Collection              | Nội dung                                                                           | Ghi bởi                                              |
+| ----------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `userDirectory/{email}` | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                             | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
+| `users/{uid}`           | Hồ sơ tạo khi đăng nhập lần đầu                                                    | API                                                  |
+| `auditLogs`             | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`) | API, script ops                                      |
+
+Super Admin: staging = _chưa cấp_; production = _chưa cấp_.
 
 ### Quyền IAM (bootstrap)
 

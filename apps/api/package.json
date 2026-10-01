@@ -19,7 +19,8 @@
     "@uniai/shared": "workspace:*",
     "firebase-admin": "^14.5.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.8",

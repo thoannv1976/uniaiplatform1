@@ -8,12 +8,9 @@ export const healthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
-export const meResponseSchema = z.object({
-  uid: z.string(),
-  email: z.string(),
-  name: z.string().nullable(),
-});
-export type MeResponse = z.infer<typeof meResponseSchema>;
+/** GET /api/me returns the caller's profile (also for pending/locked accounts). */
+export { userProfileSchema as meResponseSchema } from './users.js';
+export type { UserProfile as MeResponse } from './users.js';
 
 /** Error body returned by the API for 4xx/5xx responses. Messages are in Vietnamese. */
 export const apiErrorSchema = z.object({

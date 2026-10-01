@@ -30,6 +30,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `pnpm test:emulator` – test cần Firebase Emulator (security rules, Firestore)
 - `pnpm test:e2e` – Playwright; trong phiên Claude Code trên web, hook đặt sẵn `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
 - `pnpm format` – Prettier
+- `pnpm ops:grant-role --email … --role … --database … [--yes]` – cấp vai trò (Cowork chạy trong Cloud Shell)
 
 Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test một app riêng lẻ.
 
@@ -41,7 +42,9 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - Trừ định mức chỉ qua QuotaService (Firestore transaction); không ghi vào `budgetPeriods` theo từng yêu cầu.
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP.
 - Không commit file key service account; deploy chỉ qua GitHub Actions + Workload Identity Federation.
-- Mọi endpoint mới phải có Guard vai trò + test được/không được truy cập.
+- `AuthGuard` là guard toàn cục: mọi endpoint mới PHẢI khai báo `@Roles(...)` (hoặc `@Public()` cho health
+  check), nếu không sẽ bị chặn. Thêm endpoint vào ma trận vai trò trong `apps/api/src/auth/auth.emulator.test.ts`.
+- Vai trò/trạng thái lấy từ `users/{uid}` (Firestore), không tin custom claims (ADR 0003).
 - Test dùng Emulator + `MockProvider`; không gọi mạng ra ngoài trong test.
 - `auditLogs` và `usageTransactions` (đã committed) không được sửa/xóa.
 - Schema dùng chung đặt trong `packages/shared` (Zod); không định nghĩa trùng ở web/api.

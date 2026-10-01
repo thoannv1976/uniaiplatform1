@@ -1,6 +1,7 @@
 /** Single source of truth for Firestore collection names (see spec section 9). */
 export const COLLECTIONS = {
   users: 'users',
+  userDirectory: 'userDirectory',
   departments: 'departments',
   quotaTiers: 'quotaTiers',
   quotaPeriods: 'quotaPeriods',
