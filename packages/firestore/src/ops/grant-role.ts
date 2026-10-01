@@ -4,8 +4,10 @@
  *
  *   pnpm ops:grant-role --email a@ftu.edu.vn --role super_admin --database staging          # preview
  *   pnpm ops:grant-role --email a@ftu.edu.vn --role super_admin --database staging --yes    # apply
+ *   (break-glass admin outside @ftu.edu.vn: add --allow-outside-domain, see ADR 0004)
  */
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { isAllowedEmail, parseDomainList, ROLES, type Role } from '@uniai/shared';
 import { getDb, isEmulator } from '../admin.js';
@@ -31,6 +33,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       project: { type: 'string', default: process.env.GCLOUD_PROJECT ?? 'uniaiplatform1' },
       domains: { type: 'string', default: 'ftu.edu.vn' },
       yes: { type: 'boolean', default: false },
+      'allow-outside-domain': { type: 'boolean', default: false },
     },
   });
 
@@ -45,8 +48,17 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return 2;
   }
   if (!isAllowedEmail(email, parseDomainList(values.domains))) {
-    console.error(`Email ${email} không thuộc tên miền được phép (${values.domains}).`);
-    return 2;
+    if (!values['allow-outside-domain']) {
+      console.error(
+        `Email ${email} không thuộc tên miền được phép (${values.domains}). ` +
+          'Chỉ với tài khoản quản trị dự phòng (ADR 0004) mới thêm --allow-outside-domain.',
+      );
+      return 2;
+    }
+    console.log(
+      `Lưu ý: ${email} nằm ngoài tên miền trường. Nhớ thêm email này vào biến GitHub EXTRA_ALLOWED_EMAILS ` +
+        'rồi chạy lại Deploy, nếu không API vẫn từ chối.',
+    );
   }
 
   process.env.GCLOUD_PROJECT ??= values.project;
@@ -81,10 +93,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err: unknown) => {
-    console.error(err);
-    process.exit(1);
-  },
-);
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().then(
+    (code) => process.exit(code),
+    (err: unknown) => {
+      console.error(err);
+      process.exit(1);
+    },
+  );
+}

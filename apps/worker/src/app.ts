@@ -14,7 +14,7 @@ const CONFIG = Symbol('WORKER_CONFIG');
 class HealthController {
   constructor(@Inject(CONFIG) private readonly config: WorkerConfig) {}
 
-  @Get('healthz')
+  @Get('health')
   health(): HealthResponse {
     return {
       status: 'ok',

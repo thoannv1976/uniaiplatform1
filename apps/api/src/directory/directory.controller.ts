@@ -16,6 +16,7 @@ import {
   directoryToCsvRow,
   importRequestSchema,
   isAllowedEmail,
+  isPermittedEmail,
   parseCsv,
   parseDirectoryRows,
   toCsv,
@@ -30,7 +31,7 @@ import { CurrentAuth } from '../auth/current-user.js';
 import { Roles } from '../auth/decorators.js';
 import { IDENTITY_ADMIN, type IdentityAdmin } from '../auth/token-verifier.js';
 import { parseOrBadRequest } from '../common/zod.js';
-import { APP_CONFIG, type AppConfig } from '../config.js';
+import { APP_CONFIG, emailPolicy, type AppConfig } from '../config.js';
 import { DEPARTMENT_STORE } from '../departments/departments.controller.js';
 
 function actorOf(auth: AuthContext): DirectoryActor {
@@ -84,10 +85,7 @@ export class DirectoryController {
     @Body() body: unknown,
   ): Promise<DirectoryEntry> {
     // Plain addresses only: the email becomes a Firestore document id.
-    if (
-      !/^[^\s/@]+@[^\s/@]+$/.test(email) ||
-      !isAllowedEmail(email, this.config.allowedEmailDomains)
-    ) {
+    if (!/^[^\s/@]+@[^\s/@]+$/.test(email) || !isPermittedEmail(email, emailPolicy(this.config))) {
       throw new NotFoundException('Không tìm thấy cán bộ trong danh bạ.');
     }
     if (auth.profile.role === 'unit_admin' && !auth.profile.scopeDepartmentId) {

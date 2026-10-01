@@ -9,10 +9,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { UserStore } from '@uniai/firestore';
-import { isAllowedEmail, type Role, type UserProfile } from '@uniai/shared';
+import { isPermittedEmail, type Role, type UserProfile } from '@uniai/shared';
 import type { Request } from 'express';
 import { AuditService } from '../audit/audit.service.js';
-import { APP_CONFIG, type AppConfig } from '../config.js';
+import { APP_CONFIG, emailPolicy, type AppConfig } from '../config.js';
 import { ALLOW_INACTIVE, IS_PUBLIC, ROLES_KEY } from './decorators.js';
 import { TOKEN_VERIFIER, type TokenVerifier, type VerifiedToken } from './token-verifier.js';
 
@@ -83,7 +83,7 @@ export class AuthGuard implements CanActivate {
     }
 
     const domains = this.config.allowedEmailDomains;
-    if (!token.emailVerified || !isAllowedEmail(token.email, domains)) {
+    if (!token.emailVerified || !isPermittedEmail(token.email, emailPolicy(this.config))) {
       this.audit.recordQuietly({
         event: 'AUTH_DENIED',
         actor: token.uid,

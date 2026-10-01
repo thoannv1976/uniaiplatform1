@@ -17,14 +17,14 @@ afterAll(async () => {
 });
 
 describe('worker', () => {
-  it('serves /healthz', async () => {
-    const res = await request(app.getHttpServer()).get('/healthz').expect(200);
+  it('serves /health', async () => {
+    const res = await request(app.getHttpServer()).get('/health').expect(200);
     expect(healthResponseSchema.parse(res.body).service).toBe('uniai-worker');
   });
 
   it('does not send CORS headers', async () => {
     const res = await request(app.getHttpServer())
-      .get('/healthz')
+      .get('/health')
       .set('Origin', 'https://uniaiplatform1.web.app');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });

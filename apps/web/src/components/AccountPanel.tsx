@@ -8,13 +8,18 @@ interface Props {
   signedIn: boolean | undefined;
   profile: ProfileState;
   onSignIn: () => Promise<void>;
+  /** Break-glass admin login with email + password (ADR 0004). */
+  onPasswordSignIn?: (email: string, password: string) => Promise<void>;
   onSignOut: () => Promise<void>;
 }
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-export function AccountPanel({ signedIn, profile, onSignIn, onSignOut }: Props) {
+export function AccountPanel({ signedIn, profile, onSignIn, onPasswordSignIn, onSignOut }: Props) {
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
 
   if (signedIn === undefined) return <p>Đang kiểm tra phiên đăng nhập…</p>;
 
@@ -36,6 +41,55 @@ export function AccountPanel({ signedIn, profile, onSignIn, onSignOut }: Props) 
           <p role="alert" className="text-sm text-red-700">
             Đăng nhập không thành công: {signInError}
           </p>
+        )}
+        {onPasswordSignIn && (
+          <details className="mt-2 text-sm">
+            <summary className="cursor-pointer text-slate-500">
+              Tài khoản quản trị dự phòng (email và mật khẩu)
+            </summary>
+            <form
+              className="mt-2 flex flex-wrap items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSignInError(null);
+                setBusy(true);
+                onPasswordSignIn(email, password)
+                  .catch((err: unknown) => setSignInError(errorMessage(err)))
+                  .finally(() => {
+                    setBusy(false);
+                    setPassword('');
+                  });
+              }}
+            >
+              <input
+                type="email"
+                aria-label="Email"
+                autoComplete="username"
+                placeholder="Email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="rounded border border-slate-300 px-2 py-1"
+              />
+              <input
+                type="password"
+                aria-label="Mật khẩu"
+                autoComplete="current-password"
+                placeholder="Mật khẩu"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="rounded border border-slate-300 px-2 py-1"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Đăng nhập
+              </button>
+            </form>
+          </details>
         )}
       </div>
     );

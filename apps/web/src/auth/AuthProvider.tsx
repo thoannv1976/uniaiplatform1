@@ -2,7 +2,7 @@ import { onIdTokenChanged, type User } from 'firebase/auth';
 import type { MeResponse } from '@uniai/shared';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { fetchMe } from '../lib/api';
-import { getFirebaseAuth, signInWithGoogle, signOut } from '../lib/firebase';
+import { getFirebaseAuth, signInWithGoogle, signInWithPassword, signOut } from '../lib/firebase';
 
 export type ProfileState =
   { kind: 'loading' } | { kind: 'ok'; profile: MeResponse } | { kind: 'error'; message: string };
@@ -14,6 +14,7 @@ export interface AuthState {
   getToken: () => Promise<string>;
   refreshProfile: () => void;
   signIn: () => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getToken,
         refreshProfile: () => setRev((r) => r + 1),
         signIn: signInWithGoogle,
+        signInWithPassword,
         signOut,
       }}
     >

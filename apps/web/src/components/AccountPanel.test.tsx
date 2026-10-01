@@ -33,6 +33,27 @@ describe('AccountPanel', () => {
     expect(screen.getByText(/@ftu.edu.vn/)).toBeInTheDocument();
   });
 
+  it('signs in with email and password for break-glass admins and clears the password', async () => {
+    const onPasswordSignIn = vi.fn(() =>
+      Promise.reject(new Error('Email hoặc mật khẩu không đúng.')),
+    );
+    render(
+      <AccountPanel
+        signedIn={false}
+        profile={{ kind: 'loading' }}
+        onSignIn={noop}
+        onPasswordSignIn={onPasswordSignIn}
+        onSignOut={noop}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@gmail.com' } });
+    fireEvent.change(screen.getByLabelText('Mật khẩu'), { target: { value: 'secret-pass-123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    expect(onPasswordSignIn).toHaveBeenCalledWith('admin@gmail.com', 'secret-pass-123');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Email hoặc mật khẩu không đúng.');
+    expect(screen.getByLabelText('Mật khẩu')).toHaveValue('');
+  });
+
   it('shows the profile with role and status labels', () => {
     render(
       <AccountPanel
