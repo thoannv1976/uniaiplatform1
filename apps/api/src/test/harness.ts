@@ -40,14 +40,20 @@ export const tokenFor = (uid: string, email = `${uid}@ftu.edu.vn`, verified = tr
 
 export async function startApp() {
   const identity = new RecordingIdentityAdmin();
-  const app = await createApp(loadConfig({ ALLOWED_EMAIL_DOMAINS: 'ftu.edu.vn' }), {
-    quiet: true,
-    overrides: {
-      tokenVerifier: fakeVerifier,
-      identityAdmin: identity,
-      extraControllers: [UnguardedTestController],
+  const app = await createApp(
+    loadConfig({
+      ALLOWED_EMAIL_DOMAINS: 'ftu.edu.vn',
+      EXTRA_ALLOWED_EMAILS: 'breakglass@gmail.com',
+    }),
+    {
+      quiet: true,
+      overrides: {
+        tokenVerifier: fakeVerifier,
+        identityAdmin: identity,
+        extraControllers: [UnguardedTestController],
+      },
     },
-  });
+  );
   await app.init();
   return { app, identity };
 }

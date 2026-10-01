@@ -51,6 +51,22 @@ describe('authentication', () => {
     expect(await users().get('g1')).toBeNull();
   });
 
+  it('lets only the listed, verified break-glass address in from outside the domain', async () => {
+    const ok = await http()
+      .get('/api/me')
+      .set('Authorization', tokenFor('bg', 'BreakGlass@gmail.com'));
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ email: 'breakglass@gmail.com', status: 'pending' });
+    const unverified = await http()
+      .get('/api/me')
+      .set('Authorization', tokenFor('bg2', 'breakglass@gmail.com', false));
+    expect(unverified.status).toBe(403);
+    const other = await http()
+      .get('/api/me')
+      .set('Authorization', tokenFor('bg3', 'breakglass2@gmail.com'));
+    expect(other.status).toBe(403);
+  });
+
   it('health stays public', async () => {
     expect((await http().get('/health')).status).toBe(200);
   });

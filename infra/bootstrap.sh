@@ -10,6 +10,10 @@
 # --confirm-firestore-location (after the project owner has agreed).
 set -euo pipefail
 
+# Never wait for interactive answers (e.g. "API not enabled, enable it? (y/N)"): existence
+# checks hide gcloud output, so a prompt would hang the script invisibly.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 PROJECT_ID="${PROJECT_ID:-uniaiplatform1}"
 REGION="${REGION:-asia-southeast1}"
 GITHUB_REPO="${GITHUB_REPO:-thoannv1976/uniaiplatform1}"

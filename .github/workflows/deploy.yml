@@ -109,7 +109,12 @@ jobs:
           done
 
       - name: Deploy Cloud Run – API
+        env:
+          # Break-glass admin emails outside @ftu.edu.vn (ADR 0004); empty = none.
+          EXTRA_ALLOWED_EMAILS: ${{ vars.EXTRA_ALLOWED_EMAILS }}
         run: |
+          # ";" separates the variables below: values contain "," (lists) and "@" (emails).
+          case "$EXTRA_ALLOWED_EMAILS" in *";"*) echo "::error::EXTRA_ALLOWED_EMAILS không được chứa ';'"; exit 1;; esac
           WEB_ORIGINS="https://${SITE}.web.app,https://${SITE}.firebaseapp.com"
           gcloud run deploy "uniai-api${SUFFIX}" \
             --image="${IMAGE_BASE}/api:${GITHUB_SHA}" \
@@ -118,7 +123,7 @@ jobs:
             --allow-unauthenticated \
             --timeout=900 --concurrency=80 --memory=512Mi \
             --min-instances=0 --max-instances="$MAX_INSTANCES" \
-            --set-env-vars="^@^APP_VERSION=${VERSION}@GCLOUD_PROJECT=${PROJECT_ID}@FIRESTORE_DATABASE_ID=${FIRESTORE_DB}@ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN}@WEB_ORIGINS=${WEB_ORIGINS}" \
+            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS}" \
             --quiet
 
       - name: Deploy Cloud Run – worker (không công khai)
@@ -129,7 +134,7 @@ jobs:
             --service-account="uniai-worker@${PROJECT_ID}.iam.gserviceaccount.com" \
             --no-allow-unauthenticated \
             --min-instances=0 --max-instances=2 --memory=512Mi \
-            --set-env-vars="^@^APP_VERSION=${VERSION}@GCLOUD_PROJECT=${PROJECT_ID}@FIRESTORE_DATABASE_ID=${FIRESTORE_DB}" \
+            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB}" \
             --quiet
 
       - name: Build web với địa chỉ API vừa deploy

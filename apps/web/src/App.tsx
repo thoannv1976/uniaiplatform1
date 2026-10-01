@@ -18,7 +18,7 @@ export const ADMIN_PATHS = {
 } as const;
 
 function Home() {
-  const { user, profile, signIn, signOut } = useAuth();
+  const { user, profile, signIn, signInWithPassword, signOut } = useAuth();
   const role =
     profile.kind === 'ok' && profile.profile.status === 'active' ? profile.profile.role : null;
   return (
@@ -28,6 +28,7 @@ function Home() {
           signedIn={user === undefined ? undefined : user !== null}
           profile={profile}
           onSignIn={signIn}
+          onPasswordSignIn={signInWithPassword}
           onSignOut={signOut}
         />
         {role && DEPARTMENT_VIEWERS.includes(role) && (

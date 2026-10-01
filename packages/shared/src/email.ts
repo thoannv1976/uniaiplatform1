@@ -18,3 +18,28 @@ export function isAllowedEmail(email: string | undefined, allowedDomains: string
   const domain = email.slice(at + 1).toLowerCase();
   return allowedDomains.map(normaliseDomain).includes(domain);
 }
+
+/** Parses a comma-separated list of exact email addresses (lower-cased, trimmed). */
+export function parseEmailList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.includes('@'));
+}
+
+export interface EmailPolicy {
+  /** Whole domains, e.g. ["ftu.edu.vn"]. */
+  domains: string[];
+  /**
+   * Exact addresses allowed outside those domains: break-glass admin accounts that sign in
+   * with email + password (decision 2026-10-01, ADR 0004). Keep this list very short.
+   */
+  extraEmails: string[];
+}
+
+export function isPermittedEmail(email: string | undefined, policy: EmailPolicy): boolean {
+  if (!email) return false;
+  return (
+    isAllowedEmail(email, policy.domains) || policy.extraEmails.includes(email.trim().toLowerCase())
+  );
+}

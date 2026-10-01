@@ -30,7 +30,9 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `pnpm test:emulator` – test cần Firebase Emulator (security rules, Firestore)
 - `pnpm test:e2e` – Playwright; trong phiên Claude Code trên web, hook đặt sẵn `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
 - `pnpm format` – Prettier
-- `pnpm ops:grant-role --email … --role … --database … [--yes]` – cấp vai trò (Cowork chạy trong Cloud Shell)
+- `pnpm ops:grant-role --email … --role … --database … [--allow-outside-domain] [--yes]` – cấp vai trò (Cowork, Cloud Shell)
+- `pnpm ops:create-login --email … [--yes]` – tài khoản quản trị dự phòng email + mật khẩu (ADR 0004; mật khẩu gõ ẩn)
+- Health check là `/health` (KHÔNG dùng đường dẫn kết thúc bằng `z` như `/healthz`: Cloud Run giữ riêng)
 
 Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test một app riêng lẻ.
 

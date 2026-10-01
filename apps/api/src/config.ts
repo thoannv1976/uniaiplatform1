@@ -1,4 +1,4 @@
-import { parseDomainList } from '@uniai/shared';
+import { parseDomainList, parseEmailList, type EmailPolicy } from '@uniai/shared';
 
 export interface AppConfig {
   port: number;
@@ -8,6 +8,12 @@ export interface AppConfig {
   webOrigins: string[];
   /** Only verified emails of these domains may use the API (decision D2). */
   allowedEmailDomains: string[];
+  /** Exact break-glass admin addresses allowed outside those domains (ADR 0004). */
+  extraAllowedEmails: string[];
+}
+
+export function emailPolicy(config: AppConfig): EmailPolicy {
+  return { domains: config.allowedEmailDomains, extraEmails: config.extraAllowedEmails };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -25,6 +31,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((o) => o.trim())
       .filter(Boolean),
     allowedEmailDomains,
+    extraAllowedEmails: parseEmailList(env.EXTRA_ALLOWED_EMAILS),
   };
 }
 
