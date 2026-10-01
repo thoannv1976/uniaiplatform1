@@ -7,7 +7,8 @@ import { APP_CONFIG, type AppConfig } from '../config.js';
 export class HealthController {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
-  @Get('healthz')
+  // Not /healthz: Cloud Run reserves some paths ending in "z" and answers them itself (404).
+  @Get('health')
   @Public()
   health(): HealthResponse {
     return {

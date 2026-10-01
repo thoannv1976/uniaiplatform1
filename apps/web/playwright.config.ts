@@ -23,7 +23,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'node ../api/dist/main.js',
-      url: `http://localhost:${API_PORT}/healthz`,
+      url: `http://localhost:${API_PORT}/health`,
       env: { PORT: String(API_PORT), WEB_ORIGINS: 'http://localhost:4173', APP_VERSION: 'e2e' },
       reuseExistingServer: false,
     },

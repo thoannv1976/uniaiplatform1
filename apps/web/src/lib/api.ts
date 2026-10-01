@@ -50,7 +50,7 @@ async function call(path: string, token: string | null, init: RequestInit = {}):
 }
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  return healthResponseSchema.parse(await call('/healthz', null, { signal }));
+  return healthResponseSchema.parse(await call('/health', null, { signal }));
 }
 
 export async function fetchMe(idToken: string, signal?: AbortSignal): Promise<MeResponse> {

@@ -152,9 +152,14 @@ jobs:
         run: |
           WEB_URL="https://${SITE}.web.app"
           echo "web=$WEB_URL" >> "$GITHUB_OUTPUT"
-          curl -fsS "$API_URL/healthz" | tee /tmp/health.json
+          # Not /healthz: Cloud Run reserves some paths ending in "z" (returns 404 itself).
+          status="$(curl -sS -o /tmp/health.json -w '%{http_code}' "$API_URL/health")"
+          echo "GET /health -> $status: $(cat /tmp/health.json)"
+          test "$status" = "200"
           grep -q "\"version\":\"${VERSION}\"" /tmp/health.json
-          test "$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/api/me")" = "401"
+          me="$(curl -sS -o /dev/null -w '%{http_code}' "$API_URL/api/me")"
+          echo "GET /api/me (không token) -> $me"
+          test "$me" = "401"
           curl -fsS -o /dev/null "$WEB_URL"
           {
             echo "### Deploy ${TARGET} thành công"

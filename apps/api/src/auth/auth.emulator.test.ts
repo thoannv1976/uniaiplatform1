@@ -51,8 +51,8 @@ describe('authentication', () => {
     expect(await users().get('g1')).toBeNull();
   });
 
-  it('healthz stays public', async () => {
-    expect((await http().get('/healthz')).status).toBe(200);
+  it('health stays public', async () => {
+    expect((await http().get('/health')).status).toBe(200);
   });
 
   it('denies an endpoint that forgot to declare @Roles', async () => {

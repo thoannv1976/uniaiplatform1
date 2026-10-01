@@ -19,21 +19,21 @@ afterAll(async () => {
   await app.close();
 });
 
-describe('GET /healthz', () => {
+describe('GET /health', () => {
   it('returns a valid health payload', async () => {
-    const res = await request(app.getHttpServer()).get('/healthz').expect(200);
+    const res = await request(app.getHttpServer()).get('/health').expect(200);
     const body = healthResponseSchema.parse(res.body);
     expect(body).toMatchObject({ status: 'ok', service: 'uniai-api', version: 'test' });
   });
 
   it('allows CORS only for configured web origins', async () => {
     const allowed = await request(app.getHttpServer())
-      .get('/healthz')
+      .get('/health')
       .set('Origin', 'https://uniaiplatform1.web.app');
     expect(allowed.headers['access-control-allow-origin']).toBe('https://uniaiplatform1.web.app');
 
     const denied = await request(app.getHttpServer())
-      .get('/healthz')
+      .get('/health')
       .set('Origin', 'https://evil.example.com');
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
   });
