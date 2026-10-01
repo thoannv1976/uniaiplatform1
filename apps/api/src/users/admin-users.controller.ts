@@ -37,7 +37,7 @@ export class AdminUsersController {
       // Unit admins only see their own department; without a scope they see nobody.
       const scope = auth.profile.scopeDepartmentId;
       if (!scope) return { users: [] };
-      return { users: await this.users.list({ status: statusFilter, departmentId: scope }) };
+      return { users: await this.users.list({ status: statusFilter, withinDepartment: scope }) };
     }
     return { users: await this.users.list({ status: statusFilter }) };
   }

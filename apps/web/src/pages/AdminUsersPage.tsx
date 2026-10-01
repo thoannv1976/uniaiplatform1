@@ -74,7 +74,7 @@ export function AdminUsersPage({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">Quản trị người dùng</h2>
+        <h2 className="text-xl font-semibold">Tài khoản đăng nhập</h2>
         <div role="group" aria-label="Lọc" className="flex gap-1 text-sm">
           {(['pending', 'all'] as const).map((f) => (
             <button

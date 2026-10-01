@@ -1,4 +1,15 @@
 import {
+  departmentListResponseSchema,
+  departmentSchema,
+  directoryEntrySchema,
+  directoryListResponseSchema,
+  importResultSchema,
+  type CreateDepartmentRequest,
+  type Department,
+  type DirectoryEntry,
+  type ImportResult,
+  type UpdateDepartmentRequest,
+  type UpdateDirectoryRequest,
   apiErrorSchema,
   healthResponseSchema,
   meResponseSchema,
@@ -60,4 +71,78 @@ export async function updateUser(
   return userProfileSchema.parse(
     await call(`/api/admin/users/${encodeURIComponent(uid)}`, idToken, { method: 'PATCH', body }),
   );
+}
+
+// ---- M3: departments and staff directory ----
+
+export async function fetchDepartments(idToken: string): Promise<Department[]> {
+  return departmentListResponseSchema.parse(await call('/api/admin/departments', idToken))
+    .departments;
+}
+
+export async function createDepartment(idToken: string, input: CreateDepartmentRequest) {
+  const body = JSON.stringify(input);
+  return departmentSchema.parse(
+    await call('/api/admin/departments', idToken, { method: 'POST', body }),
+  );
+}
+
+export async function updateDepartment(
+  idToken: string,
+  id: string,
+  patch: UpdateDepartmentRequest,
+) {
+  const body = JSON.stringify(patch);
+  return departmentSchema.parse(
+    await call(`/api/admin/departments/${encodeURIComponent(id)}`, idToken, {
+      method: 'PATCH',
+      body,
+    }),
+  );
+}
+
+export async function fetchDirectory(idToken: string): Promise<DirectoryEntry[]> {
+  return directoryListResponseSchema.parse(await call('/api/admin/directory', idToken)).entries;
+}
+
+export async function updateDirectoryEntry(
+  idToken: string,
+  email: string,
+  patch: UpdateDirectoryRequest,
+) {
+  const body = JSON.stringify(patch);
+  return directoryEntrySchema.parse(
+    await call(`/api/admin/directory/${encodeURIComponent(email)}`, idToken, {
+      method: 'PATCH',
+      body,
+    }),
+  );
+}
+
+export type ImportTarget = 'departments' | 'directory';
+
+export async function importCsv(
+  idToken: string,
+  target: ImportTarget,
+  csv: string,
+  dryRun: boolean,
+): Promise<ImportResult> {
+  const body = JSON.stringify({ csv, dryRun });
+  return importResultSchema.parse(
+    await call(`/api/admin/${target}/import`, idToken, { method: 'POST', body }),
+  );
+}
+
+/** Downloads an export as a file in the browser. */
+export async function downloadExport(idToken: string, target: ImportTarget, filename: string) {
+  const res = await fetch(`${API_URL}/api/admin/${target}/export.csv`, {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) throw await readError(res);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

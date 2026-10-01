@@ -3,5 +3,6 @@ export * from './collections.js';
 export * from './seed-data.js';
 export { seed } from './seed.js';
 export * from './users.js';
+export * from './departments.js';
 export * from './audit.js';
 export * from './testing.js';

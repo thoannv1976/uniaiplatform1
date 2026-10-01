@@ -1,5 +1,5 @@
 import { Controller, Get, type INestApplication } from '@nestjs/common';
-import { AuditStore, clearFirestoreEmulator, getDb, UserStore } from '@uniai/firestore';
+import { AuditStore, clearFirestoreEmulator, getDb, seed, UserStore } from '@uniai/firestore';
 import type { Role, UserStatus } from '@uniai/shared';
 import request from 'supertest';
 import { createApp } from '../app.factory.js';
@@ -54,7 +54,11 @@ export async function startApp() {
 
 export const users = () => new UserStore(getDb());
 export const audit = () => new AuditStore(getDb());
-export const resetData = () => clearFirestoreEmulator();
+/** Empties the emulator and loads the sample department tree (FTU > KTQT > KTQT-KTVM, QTKD, QLDT). */
+export async function resetData() {
+  await clearFirestoreEmulator();
+  await seed(getDb());
+}
 
 /** Creates an existing user with the given role/status (via the directory, like production). */
 export async function givenUser(
