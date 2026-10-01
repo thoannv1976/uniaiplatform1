@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { getAdminApp } from '@uniai/firestore';
+import { clearFirestoreEmulator, getAdminApp } from '@uniai/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -31,6 +31,7 @@ let app: INestApplication;
 beforeAll(async () => {
   if (!AUTH_HOST)
     throw new Error('Cần chạy trong firebase emulators:exec (thiếu FIREBASE_AUTH_EMULATOR_HOST)');
+  await clearFirestoreEmulator();
   app = await createApp(loadConfig({ ALLOWED_EMAIL_DOMAINS: 'ftu.edu.vn' }), { quiet: true });
   await app.init();
 });
@@ -39,14 +40,14 @@ afterAll(async () => {
   await app?.close();
 });
 
-describe('GET /api/me with the Firebase Auth emulator', () => {
-  it('accepts a real ID token of a verified @ftu.edu.vn user', async () => {
+describe('real Firebase Auth emulator tokens', () => {
+  it('provisions a verified @ftu.edu.vn user as pending', async () => {
     const token = await idTokenFor('emu-gv01@ftu.edu.vn', true);
     const res = await request(app.getHttpServer())
       .get('/api/me')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(res.body.email).toBe('emu-gv01@ftu.edu.vn');
+    expect(res.body).toMatchObject({ email: 'emu-gv01@ftu.edu.vn', status: 'pending' });
   });
 
   it('rejects a real ID token from another domain', async () => {
@@ -55,5 +56,12 @@ describe('GET /api/me with the Firebase Auth emulator', () => {
       .get('/api/me')
       .set('Authorization', `Bearer ${token}`)
       .expect(403);
+  });
+
+  it('revokes refresh tokens through the real Firebase Admin SDK', async () => {
+    const user = await getAuth(getAdminApp()).getUserByEmail('emu-gv01@ftu.edu.vn');
+    await getAuth(getAdminApp()).revokeRefreshTokens(user.uid);
+    const after = await getAuth(getAdminApp()).getUser(user.uid);
+    expect(after.tokensValidAfterTime).toBeTruthy();
   });
 });
