@@ -5,8 +5,12 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - Đặc tả: `docs/Mo_ta_AI_Platform.docx` (mục 8 = chức năng, mục 9 = dữ liệu, mục 13 = milestone).
 - Kế hoạch: `docs/Ke_hoach_build_v1.docx` (mục 4 = quy trình với Claude Cowork, mục 6 = việc từng milestone).
 - Quyết định kiến trúc: `docs/adr/`. Hạ tầng hiện hành: `docs/deploy/ENVIRONMENT.md`.
+- Quyết định của Chủ dự án: `docs/QUYET_DINH.md` (email `@ftu.edu.vn`, Gemini/Claude qua Vertex AI,
+  API key do Admin nhập → Secret Manager theo ADR 0002).
 - GCP project `uniaiplatform1`, vùng `asia-southeast1`. Claude Code không có quyền vào GCP;
-  deploy chạy qua GitHub Actions, thao tác hạ tầng do Claude Cowork làm theo runbook `docs/deploy/Mx-runbook.md`.
+  deploy chạy qua GitHub Actions (`.github/workflows/deploy.yml`: `main` → staging, tag `v*` → production),
+  thao tác hạ tầng do Claude Cowork làm theo runbook `docs/deploy/Mx-runbook.md` và `infra/bootstrap.sh`.
+- Image Cloud Run: `Dockerfile` ở gốc repo, `--build-arg APP=api|worker`.
 
 ## Cấu trúc
 

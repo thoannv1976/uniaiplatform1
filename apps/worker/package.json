@@ -26,5 +26,8 @@
     "@types/supertest": "^7.2.1",
     "supertest": "^7.3.0",
     "unplugin-swc": "^2.0.0"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

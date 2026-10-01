@@ -1,0 +1,163 @@
+name: Deploy
+
+# main  → staging (automatic after every merge)
+# tag v* → production (waits for approval in the `production` environment)
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Môi trường
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation (no JSON keys)
+
+concurrency:
+  group: deploy-${{ github.ref_type == 'tag' && 'production' || inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  EMAIL_DOMAIN: ftu.edu.vn
+
+jobs:
+  plan:
+    name: Chuẩn bị
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      ready: ${{ steps.env.outputs.ready }}
+    steps:
+      - id: env
+        env:
+          INPUT_ENV: ${{ inputs.environment }}
+          WIF: ${{ vars.GCP_WIF_PROVIDER }}
+          WEB_CONFIG: ${{ vars.FIREBASE_WEB_CONFIG }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then env=production
+          elif [ -n "$INPUT_ENV" ]; then env="$INPUT_ENV"
+          else env=staging; fi
+          echo "environment=$env" >> "$GITHUB_OUTPUT"
+          if [ -z "$WIF" ] || [ -z "$WEB_CONFIG" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Bỏ qua deploy: chưa khai báo biến GCP_WIF_PROVIDER / FIREBASE_WEB_CONFIG (xem docs/deploy/M1-runbook.md)."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    name: Deploy ${{ needs.plan.outputs.environment }}
+    needs: plan
+    if: needs.plan.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ needs.plan.outputs.environment }}
+      url: ${{ steps.urls.outputs.web }}
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      TARGET: ${{ needs.plan.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tên tài nguyên theo môi trường
+        run: |
+          if [ "$TARGET" = "production" ]; then
+            suffix=""; db="(default)"; site="${PROJECT_ID}"; max=20
+          else
+            suffix="-staging"; db="staging"; site="${PROJECT_ID}-staging"; max=3
+          fi
+          {
+            echo "SUFFIX=$suffix"
+            echo "FIRESTORE_DB=$db"
+            echo "SITE=$site"
+            echo "MAX_INSTANCES=$max"
+            echo "IMAGE_BASE=${REGION}-docker.pkg.dev/${PROJECT_ID}/uniai"
+            echo "VERSION=${GITHUB_REF_NAME}-${GITHUB_SHA::7}"
+          } >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Kiểm tra nhanh trước khi deploy
+        run: pnpm lint && pnpm build && pnpm test
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build và đẩy image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          for app in api worker; do
+            docker build --build-arg APP=$app -t "${IMAGE_BASE}/${app}:${GITHUB_SHA}" .
+            docker push "${IMAGE_BASE}/${app}:${GITHUB_SHA}"
+          done
+
+      - name: Deploy Cloud Run – API
+        run: |
+          WEB_ORIGINS="https://${SITE}.web.app,https://${SITE}.firebaseapp.com"
+          gcloud run deploy "uniai-api${SUFFIX}" \
+            --image="${IMAGE_BASE}/api:${GITHUB_SHA}" \
+            --region="$REGION" \
+            --service-account="uniai-api@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --allow-unauthenticated \
+            --timeout=900 --concurrency=80 --memory=512Mi \
+            --min-instances=0 --max-instances="$MAX_INSTANCES" \
+            --set-env-vars="^@^APP_VERSION=${VERSION}@GCLOUD_PROJECT=${PROJECT_ID}@FIRESTORE_DATABASE_ID=${FIRESTORE_DB}@ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN}@WEB_ORIGINS=${WEB_ORIGINS}" \
+            --quiet
+
+      - name: Deploy Cloud Run – worker (không công khai)
+        run: |
+          gcloud run deploy "uniai-worker${SUFFIX}" \
+            --image="${IMAGE_BASE}/worker:${GITHUB_SHA}" \
+            --region="$REGION" \
+            --service-account="uniai-worker@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --no-allow-unauthenticated \
+            --min-instances=0 --max-instances=2 --memory=512Mi \
+            --set-env-vars="^@^APP_VERSION=${VERSION}@GCLOUD_PROJECT=${PROJECT_ID}@FIRESTORE_DATABASE_ID=${FIRESTORE_DB}" \
+            --quiet
+
+      - name: Build web với địa chỉ API vừa deploy
+        env:
+          VITE_FIREBASE_CONFIG: ${{ vars.FIREBASE_WEB_CONFIG }}
+        run: |
+          API_URL="$(gcloud run services describe "uniai-api${SUFFIX}" --region="$REGION" --format='value(status.url)')"
+          echo "API_URL=$API_URL" >> "$GITHUB_ENV"
+          # Call vite directly: a cached turbo build would ignore the new env values.
+          VITE_API_URL="$API_URL" VITE_EMAIL_DOMAIN="$EMAIL_DOMAIN" \
+            pnpm --filter @uniai/web exec vite build
+
+      - name: Deploy Firebase (Hosting, Firestore rules và indexes)
+        run: |
+          pnpm exec firebase deploy --project "$PROJECT_ID" \
+            --only "hosting:${TARGET},firestore" --non-interactive
+
+      - name: Smoke test
+        id: urls
+        run: |
+          WEB_URL="https://${SITE}.web.app"
+          echo "web=$WEB_URL" >> "$GITHUB_OUTPUT"
+          curl -fsS "$API_URL/healthz" | tee /tmp/health.json
+          grep -q "\"version\":\"${VERSION}\"" /tmp/health.json
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/api/me")" = "401"
+          curl -fsS -o /dev/null "$WEB_URL"
+          {
+            echo "### Deploy ${TARGET} thành công"
+            echo "- Web: $WEB_URL"
+            echo "- API: $API_URL (phiên bản \`${VERSION}\`)"
+          } >> "$GITHUB_STEP_SUMMARY"

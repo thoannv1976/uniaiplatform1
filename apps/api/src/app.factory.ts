@@ -1,14 +1,14 @@
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module.js';
+import { AppModule, type AppOverrides } from './app.module.js';
 import type { AppConfig } from './config.js';
 
 export async function createApp(
   config: AppConfig,
-  options: { quiet?: boolean } = {},
+  options: { quiet?: boolean; overrides?: AppOverrides } = {},
 ): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule.forRoot(config), {
+  const app = await NestFactory.create(AppModule.forRoot(config, options.overrides), {
     logger: options.quiet ? false : ['error', 'warn', 'log'],
   });
   app.enableCors({

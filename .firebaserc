@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "uniaiplatform1"
+  },
+  "targets": {
+    "uniaiplatform1": {
+      "hosting": {
+        "production": [
+          "uniaiplatform1"
+        ],
+        "staging": [
+          "uniaiplatform1-staging"
+        ]
+      }
+    }
   }
 }

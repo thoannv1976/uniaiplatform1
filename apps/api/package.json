@@ -8,13 +8,16 @@
     "dev": "nest start --watch --path tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:emulator": "vitest run --config vitest.emulator.config.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.2",
     "@nestjs/core": "^12.1.2",
     "@nestjs/platform-express": "^12.1.2",
+    "@uniai/firestore": "workspace:*",
     "@uniai/shared": "workspace:*",
+    "firebase-admin": "^14.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
@@ -26,5 +29,8 @@
     "@types/supertest": "^7.2.1",
     "supertest": "^7.3.0",
     "unplugin-swc": "^2.0.0"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
