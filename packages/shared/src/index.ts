@@ -3,3 +3,6 @@ export * from './roles.js';
 export * from './api.js';
 export * from './email.js';
 export * from './users.js';
+export * from './csv.js';
+export * from './departments.js';
+export * from './directory.js';

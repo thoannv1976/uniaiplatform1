@@ -2,7 +2,7 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: M2 (01/10/2026) – M1 đã merge, **chờ Cowork chạy `infra/bootstrap.sh`** (Issue #2); M2 thêm dữ liệu, không thêm tài nguyên.
+Cập nhật lần cuối: M3 (01/10/2026) – M1, M2 đã merge, **chờ Cowork chạy `infra/bootstrap.sh`** (Issue #2); M2, M3 chỉ thêm dữ liệu, không thêm tài nguyên.
 Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 
 ## Google Cloud – project `uniaiplatform1` (số 278562969448), vùng `asia-southeast1`

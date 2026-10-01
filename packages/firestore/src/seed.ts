@@ -11,7 +11,8 @@ export async function seed(db: Firestore): Promise<void> {
     batch.set(db.collection(COLLECTIONS.quotaTiers).doc(tier.id), tier);
   }
   for (const dept of SAMPLE_DEPARTMENTS) {
-    batch.set(db.collection(COLLECTIONS.departments).doc(dept.id), dept);
+    const { id, ...data } = dept;
+    batch.set(db.collection(COLLECTIONS.departments).doc(id), { ...data, status: 'active' });
   }
   batch.set(db.collection(COLLECTIONS.settings).doc('app'), APP_SETTINGS);
   await batch.commit();

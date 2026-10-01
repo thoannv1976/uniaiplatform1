@@ -1,19 +1,26 @@
 import type { Role } from '@uniai/shared';
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
+import type { ReactNode } from 'react';
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-router';
+import { DepartmentsPage } from './admin/DepartmentsPage';
+import { DirectoryPage } from './admin/DirectoryPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AccountPanel } from './components/AccountPanel';
 import { ApiStatus } from './components/ApiStatus';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 
-const USER_ADMIN_ROLES: Role[] = ['super_admin', 'auditor', 'unit_admin'];
-export const ADMIN_USERS_PATH = '/quan-tri/nguoi-dung';
+const PEOPLE_ADMINS: Role[] = ['super_admin', 'auditor', 'unit_admin'];
+const DEPARTMENT_VIEWERS: Role[] = ['super_admin', 'auditor', 'unit_admin', 'ai_admin'];
+
+export const ADMIN_PATHS = {
+  directory: '/quan-tri/can-bo',
+  accounts: '/quan-tri/tai-khoan',
+  departments: '/quan-tri/don-vi',
+} as const;
 
 function Home() {
   const { user, profile, signIn, signOut } = useAuth();
-  const canSeeAdmin =
-    profile.kind === 'ok' &&
-    profile.profile.status === 'active' &&
-    USER_ADMIN_ROLES.includes(profile.profile.role);
+  const role =
+    profile.kind === 'ok' && profile.profile.status === 'active' ? profile.profile.role : null;
   return (
     <>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -23,9 +30,12 @@ function Home() {
           onSignIn={signIn}
           onSignOut={signOut}
         />
-        {canSeeAdmin && (
-          <Link to={ADMIN_USERS_PATH} className="mt-3 inline-block text-sm text-sky-800 underline">
-            Quản trị người dùng
+        {role && DEPARTMENT_VIEWERS.includes(role) && (
+          <Link
+            to={PEOPLE_ADMINS.includes(role) ? ADMIN_PATHS.directory : ADMIN_PATHS.departments}
+            className="mt-3 inline-block text-sm text-sky-800 underline"
+          >
+            Trang quản trị
           </Link>
         )}
       </section>
@@ -36,29 +46,97 @@ function Home() {
   );
 }
 
-function AdminUsers() {
-  const { profile, getToken } = useAuth();
+/** Renders admin pages only for active users with one of `roles`; others go home. */
+function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role) => ReactNode }) {
+  const { profile } = useAuth();
   if (profile.kind === 'loading') return <p>Đang tải…</p>;
   if (
     profile.kind !== 'ok' ||
     profile.profile.status !== 'active' ||
-    !USER_ADMIN_ROLES.includes(profile.profile.role)
+    !roles.includes(profile.profile.role)
   ) {
     return <Navigate to="/" replace />;
   }
+  const role = profile.profile.role;
+  const tab = 'rounded px-3 py-1';
+  const tabClass = ({ isActive }: { isActive: boolean }) =>
+    `${tab} ${isActive ? 'bg-sky-800 text-white' : 'border border-slate-300'}`;
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <Link to="/" className="text-sm text-sky-800 underline">
-        ← Trang chủ
-      </Link>
-      <div className="mt-3">
-        <AdminUsersPage
-          canEdit={profile.profile.role === 'super_admin'}
-          selfUid={profile.profile.uid}
-          getToken={getToken}
-        />
-      </div>
+    <section className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <nav className="flex flex-wrap items-center gap-2 text-sm" aria-label="Quản trị">
+        <Link to="/" className="mr-2 text-sky-800 underline">
+          ← Trang chủ
+        </Link>
+        {PEOPLE_ADMINS.includes(role) && (
+          <>
+            <NavLink to={ADMIN_PATHS.directory} className={tabClass}>
+              Cán bộ
+            </NavLink>
+            <NavLink to={ADMIN_PATHS.accounts} className={tabClass}>
+              Tài khoản / Chờ duyệt
+            </NavLink>
+          </>
+        )}
+        <NavLink to={ADMIN_PATHS.departments} className={tabClass}>
+          Đơn vị
+        </NavLink>
+      </nav>
+      {children(role)}
     </section>
+  );
+}
+
+function AdminPages() {
+  const { profile, getToken } = useAuth();
+  const me = profile.kind === 'ok' ? profile.profile : null;
+  return (
+    <Routes>
+      <Route
+        path="can-bo"
+        element={
+          <AdminRoute roles={PEOPLE_ADMINS}>
+            {(role) => (
+              <DirectoryPage
+                role={role}
+                selfUid={me?.uid ?? ''}
+                scopeDepartmentId={me?.scopeDepartmentId ?? null}
+                getToken={getToken}
+              />
+            )}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="tai-khoan"
+        element={
+          <AdminRoute roles={PEOPLE_ADMINS}>
+            {(role) => (
+              <AdminUsersPage
+                canEdit={role === 'super_admin'}
+                selfUid={me?.uid ?? ''}
+                getToken={getToken}
+              />
+            )}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="don-vi"
+        element={
+          <AdminRoute roles={DEPARTMENT_VIEWERS}>
+            {(role) => (
+              <DepartmentsPage
+                canEdit={role === 'super_admin'}
+                canExport={role === 'super_admin' || role === 'auditor'}
+                getToken={getToken}
+              />
+            )}
+          </AdminRoute>
+        }
+      />
+      <Route path="nguoi-dung" element={<Navigate to={ADMIN_PATHS.accounts} replace />} />
+      <Route path="*" element={<Navigate to={ADMIN_PATHS.directory} replace />} />
+    </Routes>
   );
 }
 
@@ -66,7 +144,7 @@ export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <main className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center gap-6 px-4 py-8">
+        <main className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-6 px-4 py-8">
           <header>
             <p className="text-sm font-semibold tracking-wide text-sky-700">
               TRƯỜNG ĐẠI HỌC NGOẠI THƯƠNG
@@ -78,10 +156,10 @@ export function App() {
           </header>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path={ADMIN_USERS_PATH} element={<AdminUsers />} />
+            <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M2</footer>
+          <footer className="text-xs text-slate-400">Bản phát triển – milestone M3</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

@@ -110,13 +110,48 @@ describe('role matrix', () => {
     },
     {
       name: 'PATCH /api/admin/users/:uid',
-      call: () => http().patch('/api/admin/users/target').send({ departmentId: 'khoa-kt' }),
+      call: () => http().patch('/api/admin/users/target').send({ departmentId: 'QLDT' }),
       allowed: ['super_admin'],
     },
     {
       name: 'GET /api/admin/audit-logs',
       call: () => http().get('/api/admin/audit-logs'),
       allowed: ['super_admin', 'auditor'],
+    },
+    {
+      name: 'GET /api/admin/departments',
+      call: () => http().get('/api/admin/departments'),
+      allowed: ['super_admin', 'auditor', 'unit_admin', 'ai_admin'],
+    },
+    {
+      name: 'GET /api/admin/departments/export.csv',
+      call: () => http().get('/api/admin/departments/export.csv'),
+      allowed: ['super_admin', 'auditor'],
+    },
+    {
+      name: 'PATCH /api/admin/departments/:id',
+      call: () =>
+        http().patch('/api/admin/departments/QLDT').send({ name: 'Phòng Quản lý đào tạo' }),
+      allowed: ['super_admin'],
+    },
+    {
+      name: 'POST /api/admin/departments/import (dry run)',
+      call: () =>
+        http().post('/api/admin/departments/import').send({
+          csv: 'ma_don_vi,ten_don_vi,loai,ma_don_vi_cha\nQLDT,Phòng QLĐT,phong,FTU',
+          dryRun: true,
+        }),
+      allowed: ['super_admin'],
+    },
+    {
+      name: 'GET /api/admin/directory',
+      call: () => http().get('/api/admin/directory'),
+      allowed: ['super_admin', 'auditor', 'unit_admin'],
+    },
+    {
+      name: 'GET /api/admin/directory/export.csv',
+      call: () => http().get('/api/admin/directory/export.csv'),
+      allowed: ['super_admin', 'auditor', 'unit_admin'],
     },
   ];
 
@@ -140,11 +175,11 @@ describe('admin user management', () => {
 
   it('unit admins only see users of their own department', async () => {
     await givenUser(app, 'ka', 'unit_admin', 'active', {
-      departmentId: 'khoa-kt',
-      scopeDepartmentId: 'khoa-kt',
+      departmentId: 'KTQT',
+      scopeDepartmentId: 'KTQT',
     });
-    await givenUser(app, 'gv-kt', 'user', 'active', { departmentId: 'khoa-kt' });
-    await givenUser(app, 'gv-cntt', 'user', 'active', { departmentId: 'khoa-cntt' });
+    await givenUser(app, 'gv-kt', 'user', 'active', { departmentId: 'KTQT-KTVM' });
+    await givenUser(app, 'gv-cntt', 'user', 'active', { departmentId: 'QTKD' });
     await givenUser(app, 'noscope', 'unit_admin');
 
     const res = await http().get('/api/admin/users').set('Authorization', tokenFor('ka'));

@@ -18,7 +18,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `apps/api` – NestJS → Cloud Run `uniai-api` (cổng 8080)
 - `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081)
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
-- `packages/firestore` – firebase-admin, tên collection, seed
+- `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`
 - `packages/ai-providers` – interface `LLMProvider`, `MockProvider`
 
 ## Lệnh
@@ -45,6 +45,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - `AuthGuard` là guard toàn cục: mọi endpoint mới PHẢI khai báo `@Roles(...)` (hoặc `@Public()` cho health
   check), nếu không sẽ bị chặn. Thêm endpoint vào ma trận vai trò trong `apps/api/src/auth/auth.emulator.test.ts`.
 - Vai trò/trạng thái lấy từ `users/{uid}` (Firestore), không tin custom claims (ADR 0003).
+- Phạm vi Unit Admin = cây con của `scopeDepartmentId` (lọc bằng `departmentPath array-contains`);
+  Unit Admin chỉ quản lý người có vai trò `user`. Nhập CSV là all-or-nothing, báo lỗi theo dòng.
 - Test dùng Emulator + `MockProvider`; không gọi mạng ra ngoài trong test.
 - `auditLogs` và `usageTransactions` (đã committed) không được sửa/xóa.
 - Schema dùng chung đặt trong `packages/shared` (Zod); không định nghĩa trùng ở web/api.

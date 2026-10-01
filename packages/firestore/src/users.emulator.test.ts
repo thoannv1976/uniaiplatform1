@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from './admin.js';
 import { AuditStore } from './audit.js';
 import { clearFirestoreEmulator } from './testing.js';
+import { seed } from './seed.js';
 import { UserStore } from './users.js';
 
 const db = getDb();
@@ -23,12 +24,13 @@ describe('UserStore.provision', () => {
   });
 
   it('takes role, status and department from the directory', async () => {
+    await seed(db);
     await users.upsertDirectory({
       email: 'truongkhoa@ftu.edu.vn',
       role: 'unit_admin',
       status: 'active',
-      departmentId: 'khoa-cntt',
-      scopeDepartmentId: 'khoa-cntt',
+      departmentId: 'KTQT',
+      scopeDepartmentId: 'KTQT',
       updatedBy: 'test',
     });
     const { profile } = await users.provision({
@@ -39,7 +41,7 @@ describe('UserStore.provision', () => {
     expect(profile).toMatchObject({
       role: 'unit_admin',
       status: 'active',
-      scopeDepartmentId: 'khoa-cntt',
+      scopeDepartmentId: 'KTQT',
     });
   });
 
@@ -80,12 +82,13 @@ describe('UserStore.update / upsertDirectory', () => {
     expect(await users.update('missing', { status: 'locked' }, 'x')).toBeNull();
   });
 
-  it('lists by status and department', async () => {
+  it('lists by status and department subtree', async () => {
+    await seed(db);
     await users.provision({ uid: 'p1', email: 'p1@ftu.edu.vn', name: null });
     await users.provision({ uid: 'p2', email: 'p2@ftu.edu.vn', name: null });
-    await users.update('p2', { status: 'active', departmentId: 'khoa-kt' }, 'x');
+    await users.update('p2', { status: 'active', departmentId: 'KTQT-KTVM' }, 'x');
     expect((await users.list({ status: 'pending' })).map((u) => u.uid)).toEqual(['p1']);
-    expect((await users.list({ departmentId: 'khoa-kt' })).map((u) => u.uid)).toEqual(['p2']);
+    expect((await users.list({ withinDepartment: 'KTQT' })).map((u) => u.uid)).toEqual(['p2']);
   });
 
   it('records the previous login time', async () => {

@@ -12,21 +12,47 @@ export const QUOTA_TIERS = [
   { id: 'research', name: 'Research', monthlyBudget: usdToMicro(20), premiumBudget: usdToMicro(5) },
 ] as const;
 
+/** Sample tree for local development (ids are department codes; see departments.csv template). */
 export const SAMPLE_DEPARTMENTS = [
-  { id: 'truong', parentId: null, code: 'TRUONG', name: 'Trường', type: 'university' },
   {
-    id: 'khoa-cntt',
-    parentId: 'truong',
-    code: 'CNTT',
-    name: 'Khoa Công nghệ thông tin',
-    type: 'faculty',
+    id: 'FTU',
+    parentId: null,
+    name: 'Trường Đại học Ngoại thương',
+    type: 'university',
+    path: ['FTU'],
   },
-  { id: 'khoa-kt', parentId: 'truong', code: 'KT', name: 'Khoa Kinh tế', type: 'faculty' },
-  { id: 'phong-dt', parentId: 'truong', code: 'PDT', name: 'Phòng Đào tạo', type: 'office' },
+  {
+    id: 'KTQT',
+    parentId: 'FTU',
+    name: 'Khoa Kinh tế quốc tế',
+    type: 'faculty',
+    path: ['FTU', 'KTQT'],
+  },
+  {
+    id: 'QTKD',
+    parentId: 'FTU',
+    name: 'Khoa Quản trị kinh doanh',
+    type: 'faculty',
+    path: ['FTU', 'QTKD'],
+  },
+  {
+    id: 'QLDT',
+    parentId: 'FTU',
+    name: 'Phòng Quản lý đào tạo',
+    type: 'office',
+    path: ['FTU', 'QLDT'],
+  },
+  {
+    id: 'KTQT-KTVM',
+    parentId: 'KTQT',
+    name: 'Bộ môn Kinh tế vĩ mô',
+    type: 'division',
+    path: ['FTU', 'KTQT', 'KTQT-KTVM'],
+  },
 ] as const;
 
 export const APP_SETTINGS = {
-  allowedEmailDomains: ['example.edu.vn'],
+  allowedEmailDomains: ['ftu.edu.vn'],
   exchangeRateVndPerUsd: 26_000,
   killSwitch: { all: false, providers: [] as string[], models: [] as string[] },
 };
