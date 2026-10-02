@@ -2,7 +2,7 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M16 (Claude Code): job `uniai-monthly-report-*` (01:15 ngày 1, `infra/scheduler.sh`), collection `monthlyReports`; tên miền riêng tùy chọn: Load Balancer `infra/domain.sh` + biến môi trường GitHub `API_CUSTOM_DOMAIN`, `WEB_CUSTOM_DOMAIN` (chờ D10). Trước đó – M15 (Claude Code): `settings/dlp` (chính sách DLP, không cần hạ tầng; không dùng Cloud DLP API). Trước đó – M14 (Claude Code): collection `prompts`, `projects`, `conversations.projectId` (không cần hạ tầng). Trước đó – M13 (Claude Code): RAG trong chat (không cần hạ tầng mới; `conversations.knowledgeBaseIds`, `messages.citations`). Trước đó – M12 (Claude Code): Cloud Tasks `uniai-kb-ingest[-staging]` (`infra/knowledge.sh`),
+Cập nhật lần cuối: 02/10/2026 – M17 (Claude Code): Platform API, collection `appClients`, `appQuotaPeriods` (không cần hạ tầng mới). Trước đó – M16 (Claude Code): job `uniai-monthly-report-*` (01:15 ngày 1, `infra/scheduler.sh`), collection `monthlyReports`; tên miền riêng tùy chọn: Load Balancer `infra/domain.sh` + biến môi trường GitHub `API_CUSTOM_DOMAIN`, `WEB_CUSTOM_DOMAIN` (chờ D10). Trước đó – M15 (Claude Code): `settings/dlp` (chính sách DLP, không cần hạ tầng; không dùng Cloud DLP API). Trước đó – M14 (Claude Code): collection `prompts`, `projects`, `conversations.projectId` (không cần hạ tầng). Trước đó – M13 (Claude Code): RAG trong chat (không cần hạ tầng mới; `conversations.knowledgeBaseIds`, `messages.citations`). Trước đó – M12 (Claude Code): Cloud Tasks `uniai-kb-ingest[-staging]` (`infra/knowledge.sh`),
 worker deploy trước API, biến `WORKER_URL`/`KB_TASKS_QUEUE`/`TASKS_SA_EMAIL` (API) và `FILES_BUCKET`/`EMBEDDING_LOCATION`
 (worker, 1 GiB), index vector `chunks`; collection `knowledgeBases`, `documents`, `chunks`. Trước đó – M11 (Claude Code): `settings/router` (luật Smart Router, không cần hạ tầng). Trước đó – M10 (Claude Code): `infra/hardening.sh` (PITR, backup hằng ngày 14 ngày, log bucket
 `uniai-audit` + sink, cảnh báo lỗi > 5 %), `settings/killSwitch`, runbook vận hành và checklist go-live. Trước đó – M9 (Claude Code): bucket `gs://uniaiplatform1-uploads` (`infra/storage.sh`: CORS,
@@ -35,30 +35,31 @@ Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 
 ### Dữ liệu Firestore (M2, xem ADR 0003)
 
-| Collection                               | Nội dung                                                                                           | Ghi bởi                                              |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `userDirectory/{email}`                  | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                                             | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
-| `users/{uid}`                            | Hồ sơ tạo khi đăng nhập lần đầu                                                                    | API                                                  |
-| `auditLogs`                              | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`)                 | API, script ops                                      |
-| `departments/{id}`                       | Cây đơn vị (M3)                                                                                    | trang quản trị, nhập CSV                             |
-| `providers/{id}`                         | Cách gọi, bật/tắt, thứ tự dự phòng, **metadata** key (`last4`) – không có key (M4)                 | trang quản trị                                       |
-| `conversations/{id}`, `…/messages/{mid}` | Hội thoại riêng của từng người; `expireAt` + TTL 180 ngày (D8) (M5)                                | API (`/api/ai/chat`, `/api/conversations`)           |
-| `usageTransactions/{id}`                 | Sổ cái chi phí, chỉ thêm, không TTL (M5)                                                           | API                                                  |
-| `models/{id}`, `…/prices/{pid}`          | Model Registry và lịch sử giá micro-USD/1M token, chỉ thêm (M4)                                    | trang quản trị (**Nạp danh mục mẫu**)                |
-| `quotaPeriods/{uid}_{YYYYMM}`            | Định mức tháng, đã dùng, đang giữ tạm, đếm tốc độ (M7, ADR 0006)                                   | API (QuotaService), worker                           |
-| `budgetPeriods/{dept}_{YYYYMM}`          | Ngân sách đơn vị; `usedAggregate` do job tổng hợp cập nhật (M7/M8)                                 | trang quản trị, worker                               |
-| `quotaTiers/{id}`, `quotaAdjustments`    | Nhóm định mức; điều chỉnh có lý do + người duyệt (M7)                                              | trang quản trị, worker (thu hồi cấp tạm)             |
-| `monthlyReports/{YYYYMM}`                | Báo cáo tháng đã chốt: tổng, đơn vị (ngân sách, đã cấp), model, ngày (M16, ADR 0015)               | worker (`/jobs/monthly-report`), Super Admin         |
-| `usageAggregates/{YYYYMM}`, `…/days/{d}` | Tổng chi phí theo nhà cung cấp/model/nhóm/đơn vị/ngày; `_checkpoint` (M8, ADR 0007)                | worker (`/jobs/usage-aggregate`)                     |
-| `notifications`, `alertStates/{key}`     | Thông báo trong ứng dụng; chống gửi trùng mỗi ngưỡng mỗi kỳ (M8)                                   | API, worker                                          |
-| `files/{id}`                             | Tệp đính kèm: tên, loại, kích thước, số trang, đường dẫn Storage; TTL 1 ngày (chờ) / 180 ngày (M9) | API (`/api/files`)                                   |
-| `knowledgeBases/{id}`, `documents/{id}`  | Kho tri thức, tài liệu, phiên bản, trạng thái xử lý (M12, ADR 0011)                                | AI Admin, Super Admin; worker                        |
-| `chunks/{documentId}_{n}`                | Đoạn văn bản + vector 768 chiều (Vertex AI embedding)                                              | worker (`/jobs/kb-ingest`)                           |
-| `prompts/{id}`, `projects/{id}`          | Prompt riêng/dùng chung (biến `{{…}}`), dự án của người dùng (M14, ADR 0013)                       | API (`/api/prompts`, `/api/projects`)                |
-| `settings/router`                        | Luật Smart Router, nhóm mặc định, tỷ lệ mục tiêu (M11, ADR 0010)                                   | AI Admin, Super Admin                                |
-| `settings/dlp`                           | Chính sách DLP: hành động theo loại dữ liệu, ngoại lệ theo đơn vị/vai trò (M15, ADR 0014)          | Super Admin                                          |
-| `settings/killSwitch`                    | Kill switch: tắt toàn bộ/nhà cung cấp/nhóm/model, lý do, phanh khẩn cấp (M10, ADR 0009)            | Super Admin, AI Admin; worker (phanh khẩn cấp)       |
-| `settings/app`                           | Tỷ giá hiển thị VND/USD (mặc định 26.000) (M8)                                                     | Super Admin (trang Thống kê)                         |
+| Collection                                         | Nội dung                                                                                           | Ghi bởi                                              |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `userDirectory/{email}`                            | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                                             | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
+| `users/{uid}`                                      | Hồ sơ tạo khi đăng nhập lần đầu                                                                    | API                                                  |
+| `auditLogs`                                        | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`)                 | API, script ops                                      |
+| `departments/{id}`                                 | Cây đơn vị (M3)                                                                                    | trang quản trị, nhập CSV                             |
+| `providers/{id}`                                   | Cách gọi, bật/tắt, thứ tự dự phòng, **metadata** key (`last4`) – không có key (M4)                 | trang quản trị                                       |
+| `conversations/{id}`, `…/messages/{mid}`           | Hội thoại riêng của từng người; `expireAt` + TTL 180 ngày (D8) (M5)                                | API (`/api/ai/chat`, `/api/conversations`)           |
+| `usageTransactions/{id}`                           | Sổ cái chi phí, chỉ thêm, không TTL (M5)                                                           | API                                                  |
+| `models/{id}`, `…/prices/{pid}`                    | Model Registry và lịch sử giá micro-USD/1M token, chỉ thêm (M4)                                    | trang quản trị (**Nạp danh mục mẫu**)                |
+| `quotaPeriods/{uid}_{YYYYMM}`                      | Định mức tháng, đã dùng, đang giữ tạm, đếm tốc độ (M7, ADR 0006)                                   | API (QuotaService), worker                           |
+| `budgetPeriods/{dept}_{YYYYMM}`                    | Ngân sách đơn vị; `usedAggregate` do job tổng hợp cập nhật (M7/M8)                                 | trang quản trị, worker                               |
+| `quotaTiers/{id}`, `quotaAdjustments`              | Nhóm định mức; điều chỉnh có lý do + người duyệt (M7)                                              | trang quản trị, worker (thu hồi cấp tạm)             |
+| `appClients/{id}`, `appQuotaPeriods/{id}_{YYYYMM}` | Ứng dụng Platform API (hash key, quyền, ngân sách) và chi phí tháng của ứng dụng (M17, ADR 0016)   | Super Admin, AI Admin; API (`/api/platform/v1`)      |
+| `monthlyReports/{YYYYMM}`                          | Báo cáo tháng đã chốt: tổng, đơn vị (ngân sách, đã cấp), model, ngày (M16, ADR 0015)               | worker (`/jobs/monthly-report`), Super Admin         |
+| `usageAggregates/{YYYYMM}`, `…/days/{d}`           | Tổng chi phí theo nhà cung cấp/model/nhóm/đơn vị/ngày; `_checkpoint` (M8, ADR 0007)                | worker (`/jobs/usage-aggregate`)                     |
+| `notifications`, `alertStates/{key}`               | Thông báo trong ứng dụng; chống gửi trùng mỗi ngưỡng mỗi kỳ (M8)                                   | API, worker                                          |
+| `files/{id}`                                       | Tệp đính kèm: tên, loại, kích thước, số trang, đường dẫn Storage; TTL 1 ngày (chờ) / 180 ngày (M9) | API (`/api/files`)                                   |
+| `knowledgeBases/{id}`, `documents/{id}`            | Kho tri thức, tài liệu, phiên bản, trạng thái xử lý (M12, ADR 0011)                                | AI Admin, Super Admin; worker                        |
+| `chunks/{documentId}_{n}`                          | Đoạn văn bản + vector 768 chiều (Vertex AI embedding)                                              | worker (`/jobs/kb-ingest`)                           |
+| `prompts/{id}`, `projects/{id}`                    | Prompt riêng/dùng chung (biến `{{…}}`), dự án của người dùng (M14, ADR 0013)                       | API (`/api/prompts`, `/api/projects`)                |
+| `settings/router`                                  | Luật Smart Router, nhóm mặc định, tỷ lệ mục tiêu (M11, ADR 0010)                                   | AI Admin, Super Admin                                |
+| `settings/dlp`                                     | Chính sách DLP: hành động theo loại dữ liệu, ngoại lệ theo đơn vị/vai trò (M15, ADR 0014)          | Super Admin                                          |
+| `settings/killSwitch`                              | Kill switch: tắt toàn bộ/nhà cung cấp/nhóm/model, lý do, phanh khẩn cấp (M10, ADR 0009)            | Super Admin, AI Admin; worker (phanh khẩn cấp)       |
+| `settings/app`                                     | Tỷ giá hiển thị VND/USD (mặc định 26.000) (M8)                                                     | Super Admin (trang Thống kê)                         |
 
 Super Admin: staging = _chưa cấp_; production = _chưa cấp_.
 

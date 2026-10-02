@@ -18,3 +18,5 @@ export * from './knowledge.js';
 export * from './workspace.js';
 export * from './dlp.js';
 export * from './reports.js';
+export * from './platform.js';
+export * from './platform-openapi.js';

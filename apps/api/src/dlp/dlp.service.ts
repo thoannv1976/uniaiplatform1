@@ -11,6 +11,7 @@ import {
   type DlpDecision,
   type DlpDetector,
   type DlpPolicy,
+  type Role,
   type UserProfile,
 } from '@uniai/shared';
 import { AuditService } from '../audit/audit.service.js';
@@ -72,7 +73,29 @@ export class DlpService {
   /** Throws 422/428 before anything is stored or reserved; otherwise returns the masker. */
   async check(user: UserProfile, texts: string[], acknowledged: boolean): Promise<DlpOutcome> {
     const { policy } = await this.state();
-    const subject = await this.subject(user, policy);
+    return this.evaluate(user.uid, await this.subject(user, policy), texts, acknowledged);
+  }
+
+  /**
+   * Same check for a caller that is not a staff member (Platform API apps, M17): `actor` is
+   * written to the audit trail, `subject` selects the policy (role and unit path).
+   */
+  async checkFor(
+    actor: string,
+    subject: { role: Role; departmentPath: string[] },
+    texts: string[],
+    acknowledged: boolean,
+  ): Promise<DlpOutcome> {
+    return this.evaluate(actor, subject, texts, acknowledged);
+  }
+
+  private async evaluate(
+    actor: string,
+    subject: { role: Role; departmentPath: string[] },
+    texts: string[],
+    acknowledged: boolean,
+  ): Promise<DlpOutcome> {
+    const { policy } = await this.state();
     const decision = decide(
       texts.flatMap((t) => scanText(t)),
       policy,
@@ -81,13 +104,13 @@ export class DlpService {
     const blocked = decision.byAction.block ?? [];
     const warned = decision.byAction.warn ?? [];
     if (blocked.length) {
-      this.record(user, 'block', decision);
+      this.record(actor, 'block', decision);
       throw new UnprocessableEntityException(
         `Tin nhắn hoặc tệp đính kèm chứa ${labels(blocked)} nên không được gửi tới AI theo quy định bảo vệ dữ liệu của Trường. Vui lòng xóa thông tin này rồi gửi lại.`,
       );
     }
     if (warned.length && !acknowledged) {
-      this.record(user, 'warn', decision, 'confirm_required');
+      this.record(actor, 'warn', decision, 'confirm_required');
       throw new HttpException(
         `Nội dung có thể chứa ${labels(warned)}. Bạn có chắc muốn gửi tới AI không?`,
         DLP_CONFIRM_STATUS,
@@ -107,15 +130,15 @@ export class DlpService {
 
   /** Audit entry for a request that was blocked, held for confirmation, masked or confirmed. */
   record(
-    user: UserProfile,
+    actor: string,
     action: 'block' | 'warn' | 'mask',
     decision: DlpDecision,
     outcome: 'blocked' | 'confirm_required' | 'sent' = action === 'block' ? 'blocked' : 'sent',
-    target = `users/${user.uid}`,
+    target = actor.startsWith('app:') ? `appClients/${actor.slice(4)}` : `users/${actor}`,
   ) {
     this.audit.recordQuietly({
       event: 'DLP_ACTION',
-      actor: user.uid,
+      actor,
       target,
       metadata: { action, outcome, counts: decision.counts, byAction: decision.byAction },
     });

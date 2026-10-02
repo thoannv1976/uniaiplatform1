@@ -8,12 +8,19 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { UserStore } from '@uniai/firestore';
-import { isPermittedEmail, type Role, type UserProfile } from '@uniai/shared';
+import type { AppClientStore, UserStore, VerifiedApp } from '@uniai/firestore';
+import {
+  APP_KEY_PREFIX,
+  isPermittedEmail,
+  type AppScope,
+  type Role,
+  type UserProfile,
+} from '@uniai/shared';
 import type { Request } from 'express';
 import { AuditService } from '../audit/audit.service.js';
 import { APP_CONFIG, emailPolicy, type AppConfig } from '../config.js';
-import { ALLOW_INACTIVE, IS_PUBLIC, ROLES_KEY } from './decorators.js';
+import { APP_CLIENT_STORE } from '../platform/tokens.js';
+import { ALLOW_INACTIVE, APP_SCOPE, IS_PUBLIC, ROLES_KEY } from './decorators.js';
 import { TOKEN_VERIFIER, type TokenVerifier, type VerifiedToken } from './token-verifier.js';
 
 export const USER_STORE = Symbol('USER_STORE');
@@ -23,8 +30,12 @@ export interface AuthContext {
   profile: UserProfile;
 }
 
+/** Platform API caller (M17). */
+export type AppContext = VerifiedApp;
+
 export interface AuthenticatedRequest extends Request {
   auth: AuthContext;
+  platformApp: AppContext;
 }
 
 const INACTIVE_MESSAGES = {
@@ -54,6 +65,7 @@ export class AuthGuard implements CanActivate {
     @Inject(USER_STORE) private readonly users: UserStore,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly audit: AuditService,
+    @Inject(APP_CLIENT_STORE) private readonly apps: AppClientStore,
   ) {}
 
   private meta<T>(key: string, context: ExecutionContext): T | undefined {
@@ -62,6 +74,8 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (this.meta<boolean>(IS_PUBLIC, context)) return true;
+    const appScope = this.meta<AppScope>(APP_SCOPE, context);
+    if (appScope) return this.authenticateApp(context, appScope);
 
     const roles = this.meta<Role[]>(ROLES_KEY, context);
     if (!roles) {
@@ -121,6 +135,35 @@ export class AuthGuard implements CanActivate {
     if (!roles.includes(profile.role)) {
       throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này.');
     }
+    return true;
+  }
+
+  /** Platform API: application key only (staff tokens are not accepted here). */
+  private async authenticateApp(context: ExecutionContext, scope: AppScope): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<Request>();
+    const raw = bearerToken(req);
+    if (!raw?.startsWith(APP_KEY_PREFIX)) {
+      throw new UnauthorizedException(
+        'Thiếu API key của ứng dụng (header Authorization: Bearer uak_…).',
+      );
+    }
+    const app = await this.apps.verify(raw);
+    if (!app) {
+      // Never log the key: only that a key was refused.
+      this.audit.recordQuietly({
+        event: 'AUTH_DENIED',
+        actor: 'app:unknown',
+        metadata: { reason: 'app_key' },
+      });
+      throw new UnauthorizedException('API key của ứng dụng không hợp lệ hoặc đã được thay.');
+    }
+    if (app.client.status !== 'active') {
+      throw new ForbiddenException('Ứng dụng đang bị tạm dừng.');
+    }
+    if (!app.client.scopes.includes(scope)) {
+      throw new ForbiddenException(`Ứng dụng chưa được cấp quyền "${scope}".`);
+    }
+    (req as AuthenticatedRequest).platformApp = app;
     return true;
   }
 }

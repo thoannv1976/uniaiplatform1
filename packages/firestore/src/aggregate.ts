@@ -27,6 +27,8 @@ export interface PeriodAggregate extends Counter {
   byDepartment: Record<string, Counter>;
   byDepartmentModel: Record<string, Record<string, Counter>>;
   byUser: Record<string, number>;
+  /** Platform API applications (M17); their requests are not counted as users. */
+  byApp: Record<string, Counter>;
   aggregatedAt: string | null;
 }
 
@@ -83,6 +85,7 @@ function emptyPeriod(period: string): PeriodAggregate {
     byDepartment: {},
     byDepartmentModel: {},
     byUser: {},
+    byApp: {},
     aggregatedAt: null,
   };
 }
@@ -187,7 +190,9 @@ export class UsageAggregator {
           add(p.byDepartment, d, c);
           add((p.byDepartmentModel[d] ??= {}), model, c);
         }
-        p.byUser[uid] = (p.byUser[uid] ?? 0) + c.cost;
+        const appClientId = e.get('appClientId') as string | null | undefined;
+        if (appClientId) add(p.byApp, appClientId, c);
+        else p.byUser[uid] = (p.byUser[uid] ?? 0) + c.cost;
 
         const dayAgg = days.get(`${period}/${day}`)!;
         dayAgg.cost += c.cost;
@@ -195,7 +200,7 @@ export class UsageAggregator {
         dayAgg.inputTokens += c.inputTokens;
         dayAgg.outputTokens += c.outputTokens;
         dayAgg.cachedTokens += c.cachedTokens;
-        dayAgg.users[uid] = (dayAgg.users[uid] ?? 0) + 1;
+        if (!appClientId) dayAgg.users[uid] = (dayAgg.users[uid] ?? 0) + 1;
         for (const d of depts) add(dayAgg.byDepartment, d, c);
       }
 
