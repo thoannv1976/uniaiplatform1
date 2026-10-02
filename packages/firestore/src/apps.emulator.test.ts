@@ -54,7 +54,9 @@ describe('AppClientStore', () => {
     expect(key).toMatch(APP_KEY_PATTERN);
     expect(client).toMatchObject({ name: 'LMS', status: 'active', keyLast4: key.slice(-4) });
     const raw = (await db.collection(COLLECTIONS.appClients).doc(client.id).get()).data()!;
-    expect(JSON.stringify(raw)).not.toContain(key.split('_').at(-1)!);
+    // The secret part may itself contain "_" (base64url): take it from the key pattern.
+    const secret = APP_KEY_PATTERN.exec(key)![2]!;
+    expect(JSON.stringify(raw)).not.toContain(secret);
     expect(raw.keyHash).toMatch(/^[0-9a-f]{64}$/);
 
     expect((await apps.verify(key))?.client.id).toBe(client.id);
