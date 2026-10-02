@@ -20,6 +20,7 @@
     "@uniai/documents": "workspace:*",
     "@uniai/firestore": "workspace:*",
     "@uniai/shared": "workspace:*",
+    "fflate": "^0.8.3",
     "firebase-admin": "^14.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",

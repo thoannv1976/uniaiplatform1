@@ -17,6 +17,10 @@ const jobs: WorkerJobs = {
     Promise.resolve({ period: '202610', added: 5, alerts: 1 })
   ),
   ingestKbDocument: (id) => (calls.push(`ingest:${id}`), Promise.resolve({ status: 'ready' })),
+  monthlyReport: (period) => (
+    calls.push(`report:${period ?? 'last'}`),
+    Promise.resolve({ period: period ?? '202609', final: true, totalCost: 7 })
+  ),
 };
 
 beforeAll(async () => {
@@ -63,6 +67,22 @@ describe('worker', () => {
     expect(
       (await request(server).post('/jobs/kb-ingest').send({ documentId: '../x' })).body,
     ).toEqual({ status: 'invalid' });
-    expect(calls).toEqual(['rollover', 'sweep', 'expire', 'aggregate', 'ingest:abc123']);
+    expect((await request(server).post('/jobs/monthly-report').expect(200)).body).toEqual({
+      period: '202609',
+      final: true,
+      totalCost: 7,
+    });
+    await request(server).post('/jobs/monthly-report').send({ period: '202608' }).expect(200);
+    await request(server).post('/jobs/monthly-report').send({ period: '2026-08' }).expect(200);
+    expect(calls).toEqual([
+      'rollover',
+      'sweep',
+      'expire',
+      'aggregate',
+      'ingest:abc123',
+      'report:last',
+      'report:202608',
+      'report:last',
+    ]);
   });
 });

@@ -17,6 +17,7 @@ import { ApiStatus } from './components/ApiStatus';
 import { TermsGate } from './components/TermsGate';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { DashboardPage } from './usage/DashboardPage';
+import { ReportsPage } from './usage/ReportsPage';
 import { MyUsagePage } from './usage/MyUsagePage';
 import { NotificationBell } from './usage/NotificationBell';
 import { WorkspacePage } from './workspace/WorkspacePage';
@@ -41,6 +42,7 @@ export const ADMIN_PATHS = {
   chatTest: '/quan-tri/thu-chat',
   quotas: '/quan-tri/dinh-muc',
   dashboard: '/quan-tri/thong-ke',
+  reports: '/quan-tri/bao-cao',
   killSwitch: '/quan-tri/kill-switch',
   router: '/quan-tri/dinh-tuyen',
   knowledge: '/quan-tri/kho-tri-thuc',
@@ -154,6 +156,9 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         </NavLink>
         <NavLink to={ADMIN_PATHS.dashboard} className={tabClass}>
           Thống kê
+        </NavLink>
+        <NavLink to={ADMIN_PATHS.reports} className={tabClass}>
+          Báo cáo
         </NavLink>
         {REGISTRY_VIEWERS.includes(role) && (
           <>
@@ -358,6 +363,14 @@ function AdminPages() {
             {(role) => (
               <KillSwitchPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />
             )}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="bao-cao"
+        element={
+          <AdminRoute roles={DEPARTMENT_VIEWERS}>
+            {(role) => <ReportsPage role={role} getToken={getToken} />}
           </AdminRoute>
         }
       />

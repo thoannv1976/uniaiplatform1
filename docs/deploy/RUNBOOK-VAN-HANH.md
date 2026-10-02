@@ -93,6 +93,9 @@ Sau khi khóa: không giảm được thời hạn, không xóa được bucket 
 
 ## 9. Định kỳ
 
-- Hằng tháng: xem tab Thống kê, báo cáo chi phí; rà soát cảnh báo.
+- Hằng tháng (ngày 1–3): tab **Báo cáo** → tháng trước đã có báo cáo lưu (job `uniai-monthly-report-*` 01:15 ngày 1);
+  nếu chưa có hoặc có giao dịch quyết toán muộn: **Tạo lại báo cáo** (Super Admin). Tải Excel gửi Ban Giám hiệu; rà
+  soát cảnh báo và đơn vị vượt 100 % ngân sách.
+- Hằng tháng: rà soát nhật ký `DLP_ACTION` (số lượt chặn/cảnh báo theo loại) để điều chỉnh chính sách DLP.
 - Hằng quý: rà soát tài khoản Admin (Trang quản trị → Tài khoản), xoay API key.
 - Mỗi kỳ học: diễn tập rollback trên staging (mục 3) và bật/tắt kill switch (mục 2).

@@ -127,10 +127,18 @@ jobs:
         env:
           # Break-glass admin emails outside @ftu.edu.vn (ADR 0004); empty = none.
           EXTRA_ALLOWED_EMAILS: ${{ vars.EXTRA_ALLOWED_EMAILS }}
+          # Custom web domain of this environment (M16, Firebase Hosting); empty = none.
+          WEB_CUSTOM_DOMAIN: ${{ vars.WEB_CUSTOM_DOMAIN }}
         run: |
           # ";" separates the variables below: values contain "," (lists) and "@" (emails).
           case "$EXTRA_ALLOWED_EMAILS" in *";"*) echo "::error::EXTRA_ALLOWED_EMAILS không được chứa ';'"; exit 1;; esac
           WEB_ORIGINS="https://${SITE}.web.app,https://${SITE}.firebaseapp.com"
+          if [ -n "$WEB_CUSTOM_DOMAIN" ]; then
+            if ! [[ "$WEB_CUSTOM_DOMAIN" =~ ^([a-z0-9-]+\.)+[a-z]{2,}$ ]]; then
+              echo "::error::WEB_CUSTOM_DOMAIN không hợp lệ (chỉ tên miền, ví dụ ai.ftu.edu.vn)"; exit 1
+            fi
+            WEB_ORIGINS="${WEB_ORIGINS},https://${WEB_CUSTOM_DOMAIN}"
+          fi
           gcloud run deploy "uniai-api${SUFFIX}" \
             --image="${IMAGE_BASE}/api:${GITHUB_SHA}" \
             --region="$REGION" \
@@ -144,11 +152,27 @@ jobs:
       - name: Build web với địa chỉ API vừa deploy
         env:
           VITE_FIREBASE_CONFIG: ${{ vars.FIREBASE_WEB_CONFIG }}
+          # Custom API domain behind the load balancer (M16, infra/domain.sh); empty = run.app.
+          API_CUSTOM_DOMAIN: ${{ vars.API_CUSTOM_DOMAIN }}
         run: |
           API_URL="$(gcloud run services describe "uniai-api${SUFFIX}" --region="$REGION" --format='value(status.url)')"
           echo "API_URL=$API_URL" >> "$GITHUB_ENV"
+          WEB_API_URL="$API_URL"
+          if [ -n "$API_CUSTOM_DOMAIN" ]; then
+            if ! [[ "$API_CUSTOM_DOMAIN" =~ ^([a-z0-9-]+\.)+[a-z]{2,}$ ]]; then
+              echo "::error::API_CUSTOM_DOMAIN không hợp lệ (chỉ tên miền, ví dụ api.ai.ftu.edu.vn)"; exit 1
+            fi
+            # Use the custom domain only once it serves this very version (certificate active).
+            custom="https://${API_CUSTOM_DOMAIN}"
+            if curl -fsS --max-time 20 "$custom/health" | grep -q "\"version\":\"${VERSION}\""; then
+              WEB_API_URL="$custom"
+            else
+              echo "::warning::${custom}/health chưa trả về phiên bản ${VERSION}; web tạm dùng ${API_URL}."
+            fi
+          fi
+          echo "Web gọi API tại ${WEB_API_URL}"
           # Call vite directly: a cached turbo build would ignore the new env values.
-          VITE_API_URL="$API_URL" VITE_EMAIL_DOMAIN="$EMAIL_DOMAIN" \
+          VITE_API_URL="$WEB_API_URL" VITE_EMAIL_DOMAIN="$EMAIL_DOMAIN" \
             pnpm --filter @uniai/web exec vite build
 
       - name: Deploy Firebase (Hosting, Firestore rules và indexes)

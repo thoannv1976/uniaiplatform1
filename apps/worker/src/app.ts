@@ -25,6 +25,8 @@ export interface WorkerJobs {
   aggregateUsage(now?: Date): Promise<{ period: string; added: number; alerts: number }>;
   /** Knowledge Base (M12): extract, chunk, embed one document; throws to be retried. */
   ingestKbDocument(documentId: string): Promise<{ status: string }>;
+  /** Monthly report (M16) of the month that just ended, or of `period`. */
+  monthlyReport(period?: string): Promise<{ period: string; final: boolean; totalCost: number }>;
 }
 
 /**
@@ -84,6 +86,19 @@ class JobsController {
     return result;
   }
 
+  /** 1st of the month, 01:15 Vietnam time: store the report of the month that ended (M16). */
+  @Post('monthly-report')
+  @HttpCode(200)
+  async monthlyReport(@Body() body: { period?: unknown }) {
+    const period =
+      typeof body?.period === 'string' && /^\d{4}(0[1-9]|1[0-2])$/.test(body.period)
+        ? body.period
+        : undefined;
+    const result = await this.jobs.monthlyReport(period);
+    this.logger.log(JSON.stringify({ job: 'monthly-report', ...result }));
+    return result;
+  }
+
   /** Every 5 minutes: fold the ledger into dashboard totals, update budgets, raise alerts. */
   @Post('usage-aggregate')
   @HttpCode(200)
@@ -107,8 +122,14 @@ export async function createWorker(
         // Firestore is only loaded when the worker really runs the jobs.
         useFactory: async (): Promise<WorkerJobs> => {
           if (options.jobs) return options.jobs;
-          const { getDb, GcsBlobStore, KnowledgeStore, QuotaService, runUsageJob } =
-            await import('@uniai/firestore');
+          const {
+            getDb,
+            GcsBlobStore,
+            KnowledgeStore,
+            QuotaService,
+            runMonthlyReport,
+            runUsageJob,
+          } = await import('@uniai/firestore');
           const db = getDb();
           const quota = new QuotaService(db);
           const env =
@@ -120,6 +141,7 @@ export async function createWorker(
             sweepReservations: (now) => quota.sweepReservations(now),
             expireAdjustments: (now) => quota.expireAdjustments(now),
             aggregateUsage: (now) => runUsageJob(db, now),
+            monthlyReport: (period) => runMonthlyReport(db, new Date(), period),
             ingestKbDocument: async (documentId) => {
               const [{ ingestDocument }, { VertexEmbedder, MockEmbedder }] = await Promise.all([
                 import('@uniai/documents'),

@@ -74,6 +74,8 @@ import { MeController } from './me/me.controller.js';
 import { CircuitBreaker } from './resilience/circuit-breaker.js';
 import { RouterController } from './router/router.controller.js';
 import { DlpController } from './dlp/dlp.controller.js';
+import { ReportsController } from './reports/reports.controller.js';
+import { ReportsService } from './reports/reports.service.js';
 import { DLP_POLICY_STORE, DlpService } from './dlp/dlp.service.js';
 import { ROUTER_CONFIG_STORE, RouterService } from './router/router.service.js';
 import { KillSwitchController } from './resilience/kill-switch.controller.js';
@@ -125,6 +127,7 @@ export class AppModule {
         KillSwitchController,
         RouterController,
         DlpController,
+        ReportsController,
         KnowledgeController,
         KnowledgeChatController,
         PromptsController,
@@ -205,6 +208,7 @@ export class AppModule {
         RouterService,
         { provide: DLP_POLICY_STORE, useFactory: () => new DlpPolicyStore(getDb()) },
         DlpService,
+        ReportsService,
         { provide: CircuitBreaker, useFactory: () => new CircuitBreaker() },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
