@@ -1,4 +1,6 @@
 import {
+  chatKnowledgeBaseListResponseSchema,
+  type ChatKnowledgeBase,
   createKbDocumentResponseSchema,
   kbDocumentListResponseSchema,
   kbDocumentSchema,
@@ -634,4 +636,11 @@ export async function deleteKbDocument(idToken: string, id: string): Promise<voi
     headers: { Authorization: `Bearer ${idToken}` },
   });
   if (!res.ok) throw await readError(res);
+}
+
+// ---- M13: knowledge bases in chat ----
+
+export async function fetchChatKnowledgeBases(idToken: string): Promise<ChatKnowledgeBase[]> {
+  return chatKnowledgeBaseListResponseSchema.parse(await call('/api/knowledge-bases', idToken))
+    .knowledgeBases;
 }

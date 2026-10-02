@@ -1,5 +1,22 @@
 import { z } from 'zod';
 import { attachmentRefSchema, fileIdSchema, MAX_FILES_PER_MESSAGE } from './files.js';
+
+/** Max knowledge bases consulted for one message (M13). */
+export const MAX_KNOWLEDGE_BASES_PER_MESSAGE = 5;
+
+/** A source passage the answer may cite as [n] (RAG, spec 8.9). */
+export const citationSchema = z.object({
+  n: z.number().int().min(1),
+  kbId: z.string(),
+  documentId: z.string(),
+  title: z.string(),
+  version: z.number().int(),
+  effectiveDate: z.string().nullable(),
+  page: z.number().int().nullable(),
+  /** Start of the passage, for display. */
+  snippet: z.string(),
+});
+export type Citation = z.infer<typeof citationSchema>;
 import { MODEL_TIERS, modelIdSchema, PROVIDER_IDS } from './models.js';
 
 /**
@@ -37,6 +54,11 @@ export const chatRequestSchema = z
       .array(fileIdSchema)
       .max(MAX_FILES_PER_MESSAGE, `Tối đa ${MAX_FILES_PER_MESSAGE} tệp mỗi tin nhắn`)
       .optional(),
+    /** Knowledge bases to search for this message (RAG, M13). */
+    knowledgeBaseIds: z
+      .array(z.string().regex(/^[A-Za-z0-9]{1,64}$/, 'Mã kho không hợp lệ'))
+      .max(MAX_KNOWLEDGE_BASES_PER_MESSAGE)
+      .optional(),
   })
   .strict();
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -68,6 +90,8 @@ export const messageSchema = z.object({
   latencyMs: z.number().int().nullable(),
   /** Files attached to a user message. */
   attachments: z.array(attachmentRefSchema),
+  /** Knowledge-base sources of an answer (RAG). */
+  citations: z.array(citationSchema),
   createdAt: z.string(),
 });
 export type ChatMessage = z.infer<typeof messageSchema>;
@@ -82,6 +106,8 @@ export const conversationSchema = z.object({
   updatedAt: z.string(),
   /** When the content is deleted automatically (retention policy, decision D8). */
   expireAt: z.string().nullable(),
+  /** Knowledge bases last used in this conversation (M13). */
+  knowledgeBaseIds: z.array(z.string()),
 });
 export type Conversation = z.infer<typeof conversationSchema>;
 
@@ -140,6 +166,8 @@ export const chatStreamEventSchema = z.discriminatedUnion('type', [
     /** Why this model was chosen (shown to the user, stored in the ledger). */
     routeReason: z.string(),
   }),
+  /** Knowledge-base passages given to the model, before the answer (M13). */
+  z.object({ type: z.literal('citations'), citations: z.array(citationSchema) }),
   z.object({ type: z.literal('delta'), text: z.string() }),
   z.object({
     type: z.literal('done'),

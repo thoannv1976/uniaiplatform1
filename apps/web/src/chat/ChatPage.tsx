@@ -4,6 +4,7 @@ import {
   MAX_FILES_PER_MESSAGE,
   MODEL_TIER_LABELS_VI,
   type AttachmentRef,
+  type ChatKnowledgeBase,
   type ChatMessage,
   type ChatModelOption,
   type ChatStreamEvent,
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   deleteConversation,
+  fetchChatKnowledgeBases,
   fetchChatModels,
   fetchConversation,
   fetchConversations,
@@ -23,6 +25,7 @@ import {
   uploadFile,
 } from '../lib/api';
 import { AttachmentChips, AttachmentPicker, type PendingFile } from './Attachments';
+import { Citations, KnowledgePicker } from './Knowledge';
 import { CopyButton, Markdown } from './Markdown';
 
 export interface ChatApi {
@@ -34,6 +37,7 @@ export interface ChatApi {
   streamChat: typeof streamChat;
   fetchMyQuota: typeof fetchMyQuota;
   uploadFile: typeof uploadFile;
+  fetchChatKnowledgeBases: typeof fetchChatKnowledgeBases;
 }
 
 const defaultApi: ChatApi = {
@@ -45,6 +49,7 @@ const defaultApi: ChatApi = {
   streamChat,
   fetchMyQuota,
   uploadFile,
+  fetchChatKnowledgeBases,
 };
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -63,6 +68,7 @@ type ViewMessage = Pick<
   | 'error'
   | 'latencyMs'
   | 'attachments'
+  | 'citations'
 > & { modelName?: string };
 
 const toView = (m: ChatMessage): ViewMessage => ({
@@ -76,6 +82,7 @@ const toView = (m: ChatMessage): ViewMessage => ({
   error: m.error,
   latencyMs: m.latencyMs,
   attachments: m.attachments,
+  citations: m.citations,
 });
 
 /** Pinned first, then most recently updated; filtered by a case/diacritic-insensitive search. */
@@ -115,7 +122,16 @@ export function ChatPage({
   const [search, setSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pending, setPending] = useState<PendingFile[]>([]);
+  const [bases, setBases] = useState<ChatKnowledgeBase[]>([]);
+  /** Knowledge bases searched, per conversation (null key = new conversation). */
+  const [kbSelection, setKbSelection] = useState<{ key: string | null; ids: string[] }>({
+    key: null,
+    ids: [],
+  });
   const uploading = pending.some((p) => p.status === 'uploading');
+  const selectedBases = (
+    kbSelection.key === (conversationId ?? null) ? kbSelection.ids : []
+  ).filter((id) => bases.some((b) => b.id === id));
   const controller = useRef<AbortController | null>(null);
   /** Set when the stream itself created the conversation: its messages are already shown. */
   const skipLoad = useRef<string | null>(null);
@@ -148,13 +164,15 @@ export function ChatPage({
           api.fetchConversations(t),
           api.fetchChatModels(t),
           api.fetchMyQuota(t).catch(() => null),
+          api.fetchChatKnowledgeBases(t).catch(() => []),
         ]),
       )
-      .then(([list, options, q]) => {
+      .then(([list, options, q, kbs]) => {
         if (!active) return;
         setConversations(list);
         setModels(options);
         setQuota(q);
+        setBases(kbs);
       })
       .catch((err: unknown) => active && setError(errorMessage(err)));
     return () => {
@@ -172,10 +190,11 @@ export function ChatPage({
     let active = true;
     void getToken()
       .then((t) => api.fetchConversation(t, conversationId))
-      .then(
-        (detail) =>
-          active && setView({ key: conversationId, messages: detail.messages.map(toView) }),
-      )
+      .then((detail) => {
+        if (!active) return;
+        setView({ key: conversationId, messages: detail.messages.map(toView) });
+        setKbSelection({ key: conversationId, ids: detail.conversation.knowledgeBaseIds });
+      })
       .catch((err: unknown) => active && setError(errorMessage(err)));
     return () => {
       active = false;
@@ -203,8 +222,13 @@ export function ChatPage({
       if (e.conversationId !== conversationId) {
         skipLoad.current = e.conversationId;
         setView((v) => ({ ...v, key: e.conversationId }));
+        setKbSelection((k) =>
+          k.key === (conversationId ?? null) ? { ...k, key: e.conversationId } : k,
+        );
         void navigate(`${CONVERSATION_PATH}/${e.conversationId}`, { replace: !conversationId });
       }
+    } else if (e.type === 'citations') {
+      updateLast((m) => ({ ...m, citations: e.citations }));
     } else if (e.type === 'delta') {
       updateLast((m) => ({ ...m, content: m.content + e.text }));
     } else if (e.type === 'error') {
@@ -269,6 +293,7 @@ export function ChatPage({
             error: null,
             latencyMs: null,
             attachments,
+            citations: [],
           },
           {
             id: `local-answer-${list.length}`,
@@ -281,6 +306,7 @@ export function ChatPage({
             error: null,
             latencyMs: null,
             attachments: [],
+            citations: [],
           },
         ],
       };
@@ -296,6 +322,7 @@ export function ChatPage({
           model,
           ...(conversationId ? { conversationId } : {}),
           ...(attachments.length ? { fileIds: attachments.map((a) => a.id) } : {}),
+          ...(selectedBases.length ? { knowledgeBaseIds: selectedBases } : {}),
         },
         (e) => {
           if (e.type === 'meta') started = true;
@@ -452,6 +479,12 @@ export function ChatPage({
           </p>
         )}
 
+        <KnowledgePicker
+          options={bases}
+          selected={selectedBases}
+          disabled={busy}
+          onChange={(ids) => setKbSelection({ key: conversationId ?? null, ids })}
+        />
         <AttachmentPicker
           pending={pending}
           disabled={busy}
@@ -611,6 +644,7 @@ function MessageView(props: {
         streaming && <p className="text-sm text-slate-500">Đang suy nghĩ…</p>
       )}
       {m.error && <p className="text-sm text-red-700">{m.error.message}</p>}
+      <Citations citations={m.citations} />
       <footer className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         {props.modelName && <span>{props.modelName}</span>}
         {m.usage && (

@@ -480,6 +480,11 @@ describe('role matrix', () => {
       ok: 404,
     },
     {
+      name: 'GET /api/knowledge-bases',
+      call: () => http().get('/api/knowledge-bases'),
+      allowed: [...ROLES],
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],

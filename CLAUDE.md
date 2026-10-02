@@ -60,6 +60,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   điều khoản thì tăng phiên bản.
 - Kho tri thức (ADR 0011): tài liệu xử lý qua Cloud Tasks → worker `/jobs/kb-ingest` (cục bộ: ngay trong API);
   embedding 768 chiều, index vector `chunks`. Test dùng `MockEmbedder`, không gọi Vertex AI.
+- RAG (ADR 0012): chỉ tìm trong kho người dùng được dùng (ACL kiểm tra TRƯỚC truy vấn vector, kho ngoài quyền
+  → 403); trích dẫn qua sự kiện SSE `citations` và `messages.citations`; không lưu khối tài liệu vào tin nhắn.
 - AUTO đi qua Smart Router (`classifyRequest`, luật trong `settings/router`, ADR 0010); lý do định tuyến luôn
   ghi sổ cái. Không gọi AI để phân loại.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét

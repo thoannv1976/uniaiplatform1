@@ -8,6 +8,7 @@ import {
   titleFromMessage,
   type AttachmentRef,
   type ChatMessage,
+  type Citation,
   type ChatUsage,
   type Conversation,
   type MessageStatus,
@@ -30,6 +31,7 @@ function toConversation(snap: DocumentSnapshot): Conversation {
     createdAt: iso(d.createdAt) ?? new Date(0).toISOString(),
     updatedAt: iso(d.updatedAt) ?? new Date(0).toISOString(),
     expireAt: iso(d.expireAt),
+    knowledgeBaseIds: Array.isArray(d.knowledgeBaseIds) ? d.knowledgeBaseIds : [],
   };
 }
 
@@ -48,6 +50,7 @@ function toMessage(snap: DocumentSnapshot): ChatMessage {
     error: d.error ?? null,
     latencyMs: d.latencyMs ?? null,
     attachments: Array.isArray(d.attachments) ? d.attachments : [],
+    citations: Array.isArray(d.citations) ? d.citations : [],
     createdAt: iso(d.createdAt) ?? new Date(0).toISOString(),
   };
 }
@@ -72,6 +75,8 @@ export interface StartTurnInput {
   userText: string;
   /** Files attached to the user message. */
   attachments?: AttachmentRef[];
+  /** Knowledge bases searched for this turn (kept on the conversation). */
+  knowledgeBaseIds?: string[];
   modelId: string;
   providerId: ProviderId;
   /** Content is deleted automatically this many days after it was written (decision D8). */
@@ -94,6 +99,8 @@ export interface FinishTurnInput {
   stopReason: string | null;
   error: { code: string; message: string } | null;
   latencyMs: number;
+  /** Knowledge-base sources given to the model. */
+  citations?: Citation[];
   /** The model that really answered, when a fallback replaced the routed one. */
   modelId?: string;
   providerId?: ProviderId;
@@ -210,6 +217,7 @@ export class ConversationStore {
         tx.update(ref, {
           updatedAt: now,
           expireAt,
+          ...(input.knowledgeBaseIds ? { knowledgeBaseIds: input.knowledgeBaseIds } : {}),
           lastModelId: input.modelId,
           messageCount: FieldValue.increment(2),
         });
@@ -218,6 +226,7 @@ export class ConversationStore {
           ownerUid: input.ownerUid,
           title: titleFromMessage(input.userText),
           pinned: false,
+          knowledgeBaseIds: input.knowledgeBaseIds ?? [],
           lastModelId: input.modelId,
           messageCount: 2,
           createdAt: now,

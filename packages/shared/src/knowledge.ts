@@ -116,3 +116,15 @@ export const kbDocumentListResponseSchema = z.object({ documents: z.array(kbDocu
 /** Knowledge-base documents may be up to 50 MB (regulation collections). */
 export const KB_MAX_BYTES = 50 * 1024 * 1024;
 export const KB_MAX_PAGES = 2_000;
+
+/** A knowledge base a user may consult in chat (GET /api/knowledge-bases). */
+export const chatKnowledgeBaseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  documentCount: z.number().int(),
+});
+export type ChatKnowledgeBase = z.infer<typeof chatKnowledgeBaseSchema>;
+export const chatKnowledgeBaseListResponseSchema = z.object({
+  knowledgeBases: z.array(chatKnowledgeBaseSchema),
+});

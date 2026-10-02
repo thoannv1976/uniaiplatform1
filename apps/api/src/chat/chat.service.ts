@@ -30,6 +30,7 @@ import {
   type ChatRequest,
   type ChatStreamEvent,
   type ChatUsage,
+  type Citation,
   type RouteInput,
   type MessageStatus,
   type Price,
@@ -40,6 +41,7 @@ import { ProviderRuntime, ProviderUnavailableError } from '../ai/provider-runtim
 import { APP_CONFIG, type AppConfig } from '../config.js';
 import { AuditService } from '../audit/audit.service.js';
 import { FilesService, type LoadedAttachment } from '../files/files.service.js';
+import { KnowledgeRetrieval } from '../knowledge/retrieval.service.js';
 import { CircuitBreaker } from '../resilience/circuit-breaker.js';
 import { RouterService } from '../router/router.service.js';
 import { ALERTS } from '../usage/tokens.js';
@@ -53,6 +55,8 @@ const MAX_OUTPUT_TOKENS = 16_000;
 /** History sent to the model: about this many characters per context-window token. */
 const HISTORY_CHARS_PER_TOKEN = 2;
 const HISTORY_MAX_CHARS = 400_000;
+/** Knowledge-base passages per question (~6k tokens). */
+const RAG_MAX_CHARS = 24_000;
 /** Keeps proxies from closing a quiet stream (e.g. while a model is thinking). */
 const HEARTBEAT_MS = 15_000;
 /** Answers are not shortened below this to fit a small remaining quota. */
@@ -195,6 +199,7 @@ export class ChatService {
     private readonly circuit: CircuitBreaker,
     private readonly audit: AuditService,
     private readonly smartRouter: RouterService,
+    private readonly retrieval: KnowledgeRetrieval,
   ) {}
 
   private async resolve(route: Route): Promise<LLMProvider> {
@@ -307,6 +312,11 @@ export class ChatService {
       : [];
     if (!history) throw new NotFoundException('Không tìm thấy hội thoại.');
     const attached = req.fileIds?.length ? await this.files.forMessage(user.uid, req.fileIds) : [];
+    // RAG (M13): passages from the selected knowledge bases go before the question.
+    const rag = req.knowledgeBaseIds?.length
+      ? await this.retrieval.retrieve(user, req.knowledgeBaseIds, req.message, RAG_MAX_CHARS)
+      : { citations: [], context: '' };
+    const question = rag.context ? `${rag.context}\n${req.message}` : req.message;
     const earlier = await this.loadHistoryFiles(user.uid, history);
     // Files make prompts long: the route's context window decides how much of them fits.
     const build = (r: Route) => {
@@ -316,7 +326,7 @@ export class ChatService {
         role: m.role,
         ...withAttachments(m.content, earlier(m), Math.floor(budget / 4), vision),
       }));
-      const next = withAttachments(req.message, attached, budget - req.message.length, vision);
+      const next = withAttachments(question, attached, budget - question.length, vision);
       return buildMessages(turns, next, budget);
     };
     const requireImage = attached.some((f) => f.image !== null);
@@ -336,6 +346,7 @@ export class ChatService {
         conversationId: req.conversationId ?? null,
         userText: req.message,
         attachments: attached.map((f) => f.ref),
+        ...(req.knowledgeBaseIds ? { knowledgeBaseIds: req.knowledgeBaseIds } : {}),
         modelId: first.route.model.id,
         providerId: first.route.model.providerId,
         retentionDays: this.config.conversationRetentionDays,
@@ -345,7 +356,11 @@ export class ChatService {
       await this.quota.release(first.reservation).catch(() => undefined);
       throw err;
     }
-    await this.stream({ user, req, build, requireImage, turn, requestTime, res }, first, provider);
+    await this.stream(
+      { user, req, build, requireImage, turn, requestTime, res, citations: rag.citations },
+      first,
+      provider,
+    );
   }
 
   /** One call to a provider, forwarding text to the browser as it arrives. */
@@ -506,6 +521,7 @@ export class ChatService {
         routeReason: route.reason,
       });
     sendMeta(first.route);
+    if (ctx.citations.length) send({ type: 'citations', citations: ctx.citations });
     if (first.route.reason !== 'Người dùng chọn model') {
       this.auditQuietly('MODEL_ROUTED', user.uid, turn, {
         model: first.route.model.id,
@@ -635,6 +651,7 @@ export class ChatService {
         stopReason: result.stopReason,
         error,
         latencyMs,
+        citations: ctx.citations,
         modelId: planned.route.model.id,
         providerId: planned.route.model.providerId,
       });
@@ -705,4 +722,6 @@ interface StreamContext {
   turn: { conversationId: string; userMessageId: string; messageId: string };
   requestTime: Date;
   res: Response;
+  /** Knowledge-base passages given to the model (M13). */
+  citations: Citation[];
 }

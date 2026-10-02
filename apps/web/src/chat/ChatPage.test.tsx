@@ -13,6 +13,7 @@ const conv = (id: string, title: string, over: Partial<Conversation> = {}): Conv
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
   expireAt: null,
+  knowledgeBaseIds: [],
   ...over,
 });
 
@@ -32,6 +33,7 @@ const DETAIL: ConversationDetail = {
       error: null,
       latencyMs: null,
       attachments: [{ id: 'f0', name: 'chuong-trinh.pdf', kind: 'pdf' }],
+      citations: [],
       createdAt: '2026-10-01T00:00:00.000Z',
     },
     {
@@ -47,6 +49,7 @@ const DETAIL: ConversationDetail = {
       error: null,
       latencyMs: 900,
       attachments: [],
+      citations: [],
       createdAt: '2026-10-01T00:00:01.000Z',
     },
   ],
@@ -80,6 +83,9 @@ function setup(
       ]),
     ),
     streamChat: vi.fn(stream),
+    fetchChatKnowledgeBases: vi.fn(() =>
+      Promise.resolve([{ id: 'kb1', name: 'Quy chế đào tạo', description: '', documentCount: 3 }]),
+    ),
     uploadFile: vi.fn((_t: string, file: File) =>
       file.name.endsWith('.exe')
         ? Promise.reject(new Error('Loại tệp không được hỗ trợ.'))
@@ -239,6 +245,45 @@ describe('ChatPage', () => {
     const chips = await screen.findByRole('list', { name: 'Tệp đính kèm' });
     expect(chips).toHaveTextContent('quy-che.pdf');
     expect(screen.queryByText(/quy-che\.pdf · 5 B/)).not.toBeInTheDocument();
+  });
+
+  it('searches the chosen knowledge base and shows the sources', async () => {
+    const { ui } = setup((_t, req, onEvent) => {
+      expect(req).toEqual({
+        message: 'Bảo lưu bao lâu?',
+        model: 'auto',
+        knowledgeBaseIds: ['kb1'],
+      });
+      onEvent(META);
+      onEvent({
+        type: 'citations',
+        citations: [
+          {
+            n: 1,
+            kbId: 'kb1',
+            documentId: 'd1',
+            title: 'Quy định bảo lưu',
+            version: 2,
+            effectiveDate: '2026-09-01',
+            page: 3,
+            snippet: 'Thời gian bảo lưu tối đa hai năm.',
+          },
+        ],
+      });
+      onEvent({ type: 'delta', text: 'Tối đa hai năm [1].' });
+      return Promise.resolve();
+    });
+    ui('/');
+    fireEvent.click(await screen.findByText('📚 Kho tri thức'));
+    fireEvent.click(screen.getByLabelText(/Quy chế đào tạo/));
+    expect(screen.getByText('📚 Kho tri thức (1)')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Tin nhắn'), { target: { value: 'Bảo lưu bao lâu?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi' }));
+    const sources = await screen.findByRole('list', { name: 'Nguồn trích dẫn' });
+    expect(sources).toHaveTextContent('[1] Quy định bảo lưu');
+    expect(sources).toHaveTextContent('phiên bản 2, hiệu lực 01/09/2026, trang 3');
+    // The new conversation keeps the selection.
+    expect(screen.getByText('📚 Kho tri thức (1)')).toBeInTheDocument();
   });
 
   it('shows the files of stored messages', async () => {
