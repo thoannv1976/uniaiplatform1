@@ -7,6 +7,7 @@ import { KillSwitchPage } from './admin/KillSwitchPage';
 import { KnowledgePage } from './admin/KnowledgePage';
 import { RouterPage } from './admin/RouterPage';
 import { DlpPage } from './admin/DlpPage';
+import { AppClientsPage } from './admin/AppClientsPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
 import { ProvidersPage } from './admin/ProvidersPage';
@@ -47,6 +48,7 @@ export const ADMIN_PATHS = {
   router: '/quan-tri/dinh-tuyen',
   knowledge: '/quan-tri/kho-tri-thuc',
   dlp: '/quan-tri/dlp',
+  apps: '/quan-tri/ung-dung',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
 export const WORKSPACE_PATH = '/khong-gian';
@@ -183,6 +185,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         {REGISTRY_VIEWERS.includes(role) && (
           <NavLink to={ADMIN_PATHS.router} className={tabClass}>
             Định tuyến
+          </NavLink>
+        )}
+        {REGISTRY_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.apps} className={tabClass}>
+            Ứng dụng
           </NavLink>
         )}
         {DLP_VIEWERS.includes(role) && (
@@ -345,6 +352,16 @@ function AdminPages() {
         element={
           <AdminRoute roles={REGISTRY_VIEWERS}>
             {(role) => <RouterPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="ung-dung"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => (
+              <AppClientsPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />
+            )}
           </AdminRoute>
         }
       />

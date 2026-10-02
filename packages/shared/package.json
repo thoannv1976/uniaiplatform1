@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "openapi": "tsc -p tsconfig.build.json && node scripts/write-openapi.mjs && cd ../.. && prettier --write docs/platform/openapi.json"
   },
   "dependencies": {
     "zod": "^4.6.5"

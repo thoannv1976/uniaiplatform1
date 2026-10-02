@@ -17,11 +17,12 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 
 - `apps/web` – React + Vite SPA → Firebase Hosting
 - `apps/api` – NestJS → Cloud Run `uniai-api` (cổng 8080)
+- `examples/platform-client` – ứng dụng mẫu gọi Platform API (Node.js, không thư viện)
 - `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081); job `/jobs/*` do Cloud Scheduler gọi (`infra/scheduler.sh`)
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
   `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái),
-  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `MonthlyReportStore` + `runMonthlyReport` (ADR 0015), `DlpPolicyStore`, `SettingsStore`
+  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `MonthlyReportStore` + `runMonthlyReport` (ADR 0015), `AppClientStore` (ADR 0016), `DlpPolicyStore`, `SettingsStore`
 - `packages/documents` – trích nội dung PDF/DOCX/XLSX/PPTX/văn bản, chia đoạn, `ingestDocument` (kho tri thức)
 - `packages/ai-providers` – interface `LLMProvider`; `Embedder` (Vertex AI / `MockEmbedder`); adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
   `MockProvider`; ảnh trong tin nhắn (`images`); `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
@@ -72,6 +73,10 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - Báo cáo tháng (ADR 0015): `monthlyReports/{YYYYMM}` dựng từ `usageAggregates` (job `/jobs/monthly-report` ngày 1);
   Unit Admin chỉ thấy cây con (`scopeReport`). Excel qua `apps/api/src/reports/xlsx.ts` (không công thức), audit
   `REPORT_EXPORT`. Tên miền riêng: `infra/domain.sh` + biến Environment `API_CUSTOM_DOMAIN`/`WEB_CUSTOM_DOMAIN`.
+- Platform API (ADR 0016): ứng dụng nội bộ gọi `/api/platform/v1/*` bằng key `uak_…` (chỉ lưu SHA-256, hiện một
+  lần); endpoint khai báo `@AppScopeRequired(scope)` thay cho `@Roles`. Định mức ứng dụng qua `QuotaService`
+  (`appQuotaPeriods`), sổ cái `uid = app:<id>` + `appClientId`. OpenAPI sinh từ Zod: `docs/platform/openapi.json`
+  (`pnpm --filter @uniai/shared openapi`).
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
   sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

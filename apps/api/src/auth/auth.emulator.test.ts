@@ -441,6 +441,37 @@ describe('role matrix', () => {
       allowed: ['super_admin', 'auditor', 'unit_admin'],
     },
     {
+      name: 'GET /api/admin/app-clients',
+      call: () => http().get('/api/admin/app-clients'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'POST /api/admin/app-clients',
+      call: () =>
+        http()
+          .post('/api/admin/app-clients')
+          .send({ name: 'A', ownerDepartmentId: 'KHONGCO', scopes: ['chat'], monthlyBudget: 0 }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'PATCH /api/admin/app-clients/:id',
+      call: () => http().patch('/api/admin/app-clients/missing').send({ name: 'B' }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'POST /api/admin/app-clients/:id/rotate',
+      call: () => http().post('/api/admin/app-clients/missing/rotate'),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'GET /api/admin/platform/openapi.json',
+      call: () => http().get('/api/admin/platform/openapi.json'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
       name: 'GET /api/admin/dlp-rules',
       call: () => http().get('/api/admin/dlp-rules'),
       allowed: ['super_admin', 'auditor'],

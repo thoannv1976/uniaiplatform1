@@ -20,6 +20,8 @@ export const COLLECTIONS = {
   auditLogs: 'auditLogs',
   settings: 'settings',
   monthlyReports: 'monthlyReports',
+  appClients: 'appClients',
+  appQuotaPeriods: 'appQuotaPeriods',
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

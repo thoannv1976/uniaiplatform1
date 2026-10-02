@@ -66,6 +66,13 @@ export interface ReserveInput {
   fallbackFrom?: string | null;
   /** Per-user requests per minute for this model (registry); null = no extra limit. */
   modelRateLimit?: number | null;
+  /**
+   * Platform API (M17): the request is an application's. `uid` is then ignored; the app's
+   * own budget, rate limit and unit apply, and the ledger records `appClientId`.
+   */
+  appClientId?: string | null;
+  /** Free text from the app (ledger only). */
+  reference?: string | null;
   now?: Date;
 }
 
@@ -75,6 +82,8 @@ export interface Reservation {
   period: string;
   estimate: number;
   premium: boolean;
+  /** Set for Platform API requests: the reservation sits on the app's period. */
+  appClientId?: string | null;
 }
 
 export interface CommitInput {
@@ -198,6 +207,15 @@ export class QuotaService {
   private periodRef(uid: string, period: string): DocumentReference {
     return this.periods().doc(`${uid}_${period}`);
   }
+  private appPeriodRef(clientId: string, period: string): DocumentReference {
+    return this.db.collection(COLLECTIONS.appQuotaPeriods).doc(`${clientId}_${period}`);
+  }
+  /** Where a reservation's money sits: the user's or the application's period. */
+  private refFor(r: Pick<Reservation, 'uid' | 'period' | 'appClientId'>): DocumentReference {
+    return r.appClientId
+      ? this.appPeriodRef(r.appClientId, r.period)
+      : this.periodRef(r.uid, r.period);
+  }
 
   // --- tiers ----------------------------------------------------------------------------
 
@@ -232,6 +250,7 @@ export class QuotaService {
   // --- request path ---------------------------------------------------------------------
 
   async reserve(input: ReserveInput): Promise<Reservation> {
+    if (input.appClientId) return this.reserveApp({ ...input, appClientId: input.appClientId });
     const now = input.now ?? new Date();
     const period = quotaPeriodOf(now);
     const tiers = await this.tiers();
@@ -341,12 +360,151 @@ export class QuotaService {
       period,
       estimate: input.estimate,
       premium: input.premium,
+      appClientId: null,
     };
+  }
+
+  /**
+   * Platform API (M17): reserves against appQuotaPeriods/{clientId}_{YYYYMM}. The budget and
+   * rate limit are read from appClients/{id} inside the transaction, so a change or a
+   * disabled app applies to the very next request.
+   */
+  private async reserveApp(input: ReserveInput & { appClientId: string }): Promise<Reservation> {
+    const now = input.now ?? new Date();
+    const period = quotaPeriodOf(now);
+    const clientId = input.appClientId;
+    const appRef = this.db.collection(COLLECTIONS.appClients).doc(clientId);
+    const ref = this.appPeriodRef(clientId, period);
+    const txnRef = this.ledger().doc();
+    const uid = `app:${clientId}`;
+
+    await this.db.runTransaction(async (tx) => {
+      const [appSnap, snap] = await Promise.all([tx.get(appRef), tx.get(ref)]);
+      const app = appSnap.data();
+      if (!app || app.status !== 'active') {
+        throw new QuotaError('Ứng dụng không tồn tại hoặc đã bị tạm dừng.', 'forbidden');
+      }
+      const limit = num(app.monthlyBudget);
+      const d = snap.exists ? (snap.data() ?? {}) : {};
+      const used = num(d.used);
+      const reserved = num(d.reserved);
+      const remaining = limit - used - reserved;
+      if (input.estimate > remaining) {
+        throw new QuotaError(
+          remaining <= 0
+            ? `Ứng dụng đã dùng hết ngân sách AI tháng này (${formatUsd(limit)}).`
+            : `Ngân sách còn lại của ứng dụng (${formatUsd(remaining)}) không đủ cho yêu cầu này (ước tính tối đa ${formatUsd(input.estimate)}).`,
+          'quota_exceeded',
+        );
+      }
+      const rpm = Math.max(1, num(app.requestsPerMinute) || 60);
+      let windowStart = num(d.rateWindowStart);
+      let count = num(d.rateCount);
+      if (now.getTime() - windowStart >= WINDOW_MS) {
+        windowStart = now.getTime();
+        count = 0;
+      }
+      if (count >= rpm) {
+        const wait = Math.max(1, Math.ceil((windowStart + WINDOW_MS - now.getTime()) / 1000));
+        throw new QuotaError(
+          `Ứng dụng gửi quá nhanh (tối đa ${rpm} yêu cầu/phút). Thử lại sau ${wait} giây.`,
+          'rate_limited',
+          wait,
+        );
+      }
+      const path = (app.ownerDepartmentPath as string[] | undefined) ?? [];
+      tx.set(
+        ref,
+        {
+          appClientId: clientId,
+          period,
+          limit,
+          used,
+          reserved: reserved + input.estimate,
+          rateWindowStart: windowStart,
+          rateCount: count + 1,
+          departmentId: app.ownerDepartmentId ?? null,
+          departmentPath: path,
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(snap.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+        },
+        { merge: true },
+      );
+      tx.create(txnRef, {
+        status: 'reserved',
+        uid,
+        period,
+        departmentId: app.ownerDepartmentId ?? null,
+        departmentPath: path,
+        appClientId: clientId,
+        reference: input.reference ?? null,
+        providerId: input.providerId,
+        transport: input.transport,
+        modelId: input.modelId,
+        modelTier: input.modelTier ?? null,
+        apiModelId: input.apiModelId,
+        priceId: input.priceId,
+        premium: false,
+        reservedCost: input.estimate,
+        conversationId: null,
+        messageId: null,
+        routeReason: input.routeReason,
+        fallbackFrom: input.fallbackFrom ?? null,
+        requestTime: Timestamp.fromDate(now),
+      });
+    });
+    return {
+      txnId: txnRef.id,
+      uid,
+      period,
+      estimate: input.estimate,
+      premium: false,
+      appClientId: clientId,
+    };
+  }
+
+  /** This month's figures of an application (Platform API usage, admin list). */
+  async appUsage(
+    clientId: string,
+    period = quotaPeriodOf(new Date()),
+  ): Promise<{ used: number; reserved: number }> {
+    const d = (await this.appPeriodRef(clientId, period).get()).data() ?? {};
+    return { used: num(d.used), reserved: num(d.reserved) };
+  }
+
+  /**
+   * M17: an application's monthly budget counts as allocated in its unit and every parent
+   * unit. Throws when giving `budget` to the app would push a unit with a budget this
+   * month over it (Σ user quotas + Σ app budgets ≤ unit budget).
+   */
+  async assertAppBudgetFits(
+    tx: Transaction,
+    input: { clientId: string | null; departmentPath: string[]; budget: number },
+    period = quotaPeriodOf(new Date()),
+  ): Promise<void> {
+    const tiers = await this.tiers();
+    const budgetSnaps = input.departmentPath.length
+      ? await tx.getAll(...input.departmentPath.map((d) => this.budgetRef(d, period)))
+      : [];
+    for (const [i, dept] of input.departmentPath.entries()) {
+      const snap = budgetSnaps[i];
+      if (!snap?.exists) continue;
+      const budget = num(snap.get('budget'));
+      const { total, byApp } = await this.allocated(tx, dept, period, tiers);
+      const current = input.clientId ? (byApp.get(input.clientId) ?? 0) : 0;
+      const next = total - current + input.budget;
+      if (next > budget) {
+        throw new QuotaError(
+          `Vượt ngân sách đơn vị ${dept}: đã cấp ${formatUsd(total - current)}, ngân sách ${formatUsd(budget)}.`,
+          'invalid',
+        );
+      }
+    }
   }
 
   /** Settles the real cost and returns the reservation; also after the sweeper expired it. */
   async commit(r: Reservation, result: CommitInput): Promise<QuotaPeriodDoc | null> {
-    const ref = this.periodRef(r.uid, r.period);
+    const ref = this.refFor(r);
     const txnRef = this.ledger().doc(r.txnId);
     return this.db.runTransaction(async (tx) => {
       const [txn, snap] = await Promise.all([tx.get(txnRef), tx.get(ref)]);
@@ -381,7 +539,7 @@ export class QuotaService {
 
   /** Gives the reservation back when nothing was billed (refused before any token). */
   async release(r: Reservation, status: 'released' | 'expired' = 'released'): Promise<void> {
-    const ref = this.periodRef(r.uid, r.period);
+    const ref = this.refFor(r);
     const txnRef = this.ledger().doc(r.txnId);
     await this.db.runTransaction(async (tx) => {
       const txn = await tx.get(txnRef);
@@ -414,6 +572,7 @@ export class QuotaService {
           period: doc.get('period'),
           estimate: num(doc.get('reservedCost')),
           premium: doc.get('premium') === true,
+          appClientId: (doc.get('appClientId') as string | null | undefined) ?? null,
         },
         'expired',
       );
@@ -460,19 +619,34 @@ export class QuotaService {
     period: string,
     tiers: Record<QuotaTierId, QuotaTier>,
   ) {
-    const users = await tx.get(
-      this.db.collection(COLLECTIONS.users).where('departmentPath', 'array-contains', departmentId),
-    );
+    const [users, apps] = await Promise.all([
+      tx.get(
+        this.db
+          .collection(COLLECTIONS.users)
+          .where('departmentPath', 'array-contains', departmentId),
+      ),
+      tx.get(
+        this.db
+          .collection(COLLECTIONS.appClients)
+          .where('ownerDepartmentPath', 'array-contains', departmentId),
+      ),
+    ]);
+    // Applications of the unit (M17): their monthly budget is handed out like a quota.
+    const byApp = new Map<string, number>();
+    for (const a of apps.docs) {
+      if (a.get('status') === 'active') byApp.set(a.id, num(a.get('monthlyBudget')));
+    }
+    let total = 0;
+    for (const v of byApp.values()) total += v;
     const active = users.docs.map(userInfo).filter((u) => u.status === 'active');
-    if (active.length === 0) return { total: 0, byUid: new Map<string, number>() };
-    const snaps = await tx.getAll(...active.map((u) => this.periodRef(u.uid, period)));
     const byUid = new Map<string, number>();
+    if (active.length === 0) return { total, byUid, byApp };
+    const snaps = await tx.getAll(...active.map((u) => this.periodRef(u.uid, period)));
     active.forEach((u, i) =>
       byUid.set(u.uid, periodDoc(snaps[i] ?? null, u, period, tiers[u.tierId]).limit),
     );
-    let total = 0;
     for (const v of byUid.values()) total += v;
-    return { total, byUid };
+    return { total, byUid, byApp };
   }
 
   // --- adjustments ----------------------------------------------------------------------
@@ -718,7 +892,7 @@ export class QuotaService {
       const { total } = await this.allocated(tx, department.id, period, tiers);
       if (budget < total) {
         throw new QuotaError(
-          `Ngân sách thấp hơn tổng định mức đã cấp cho cán bộ của đơn vị (${formatUsd(total)}).`,
+          `Ngân sách thấp hơn tổng định mức đã cấp cho cán bộ và ứng dụng của đơn vị (${formatUsd(total)}).`,
           'invalid',
         );
       }

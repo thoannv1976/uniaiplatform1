@@ -21,12 +21,19 @@ import {
   type KbDocument,
   type KnowledgeBase,
   type UpdateKnowledgeBaseRequest,
+  appClientKeyResponseSchema,
+  appClientListResponseSchema,
+  appClientViewSchema,
   dlpPolicyViewSchema,
   monthlyReportViewSchema,
   dlpTestResponseSchema,
   routerTestResponseSchema,
   routerViewSchema,
   type RouterConfig,
+  type AppClientKeyResponse,
+  type AppClientView,
+  type CreateAppClientRequest,
+  type UpdateAppClientRequest,
   type DlpPolicy,
   type MonthlyReportView,
   type DlpPolicyView,
@@ -781,4 +788,44 @@ export async function generateMonthlyReport(
 /** Downloads the Excel workbook of a month (the caller's scope). */
 export async function downloadMonthlyReport(idToken: string, period: string, filename: string) {
   await downloadCsv(idToken, `/api/reports/export?period=${period}&format=xlsx`, filename);
+}
+
+// ---- M17: Platform API applications ----
+
+export async function fetchAppClients(idToken: string): Promise<AppClientView[]> {
+  return appClientListResponseSchema.parse(await call('/api/admin/app-clients', idToken)).clients;
+}
+
+export async function createAppClient(
+  idToken: string,
+  input: CreateAppClientRequest,
+): Promise<AppClientKeyResponse> {
+  return appClientKeyResponseSchema.parse(
+    await call('/api/admin/app-clients', idToken, { method: 'POST', body: JSON.stringify(input) }),
+  );
+}
+
+export async function updateAppClient(
+  idToken: string,
+  id: string,
+  patch: UpdateAppClientRequest,
+): Promise<AppClientView> {
+  return appClientViewSchema.parse(
+    await call(`/api/admin/app-clients/${encodeURIComponent(id)}`, idToken, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  );
+}
+
+/** New key for the app; the old key stops working immediately. */
+export async function rotateAppClientKey(
+  idToken: string,
+  id: string,
+): Promise<AppClientKeyResponse> {
+  return appClientKeyResponseSchema.parse(
+    await call(`/api/admin/app-clients/${encodeURIComponent(id)}/rotate`, idToken, {
+      method: 'POST',
+    }),
+  );
 }

@@ -14,6 +14,7 @@ import {
   AuditStore,
   ConversationStore,
   DepartmentStore,
+  AppClientStore,
   DlpPolicyStore,
   FileStore,
   GcsBlobStore,
@@ -74,6 +75,10 @@ import { MeController } from './me/me.controller.js';
 import { CircuitBreaker } from './resilience/circuit-breaker.js';
 import { RouterController } from './router/router.controller.js';
 import { DlpController } from './dlp/dlp.controller.js';
+import { APP_CLIENT_STORE } from './platform/tokens.js';
+import { AppClientsController } from './platform/app-clients.controller.js';
+import { PlatformChatService } from './platform/platform-chat.service.js';
+import { PlatformController } from './platform/platform.controller.js';
 import { ReportsController } from './reports/reports.controller.js';
 import { ReportsService } from './reports/reports.service.js';
 import { DLP_POLICY_STORE, DlpService } from './dlp/dlp.service.js';
@@ -128,6 +133,8 @@ export class AppModule {
         RouterController,
         DlpController,
         ReportsController,
+        AppClientsController,
+        PlatformController,
         KnowledgeController,
         KnowledgeChatController,
         PromptsController,
@@ -206,9 +213,11 @@ export class AppModule {
         KillSwitchService,
         { provide: ROUTER_CONFIG_STORE, useFactory: () => new RouterConfigStore(getDb()) },
         RouterService,
+        { provide: APP_CLIENT_STORE, useFactory: () => new AppClientStore(getDb()) },
         { provide: DLP_POLICY_STORE, useFactory: () => new DlpPolicyStore(getDb()) },
         DlpService,
         ReportsService,
+        PlatformChatService,
         { provide: CircuitBreaker, useFactory: () => new CircuitBreaker() },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
