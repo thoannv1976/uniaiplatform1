@@ -57,6 +57,8 @@ export const AUDIT_EVENTS = [
   'API_ERROR',
   'TERMS_ACCEPTED',
   'KNOWLEDGE_UPDATE',
+  'DLP_ACTION',
+  'REPORT_EXPORT',
 ] as const;
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];
 

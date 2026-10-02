@@ -55,6 +55,9 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   ADR 0006); không ghi vào `budgetPeriods` theo từng yêu cầu. Hết định mức → 402, quá nhanh → 429 + Retry-After.
 - Tệp đính kèm chỉ qua `/api/files` (signed URL PUT lên `gs://uniaiplatform1-uploads`, ADR 0008); API kiểm tra byte
   đầu và trích văn bản, chỉ giữ văn bản đã trích (hoặc ảnh). Không ghi tên/nội dung tệp vào log hay audit.
+- DLP (ADR 0014): tin nhắn, tệp mới và tệp/chỉ dẫn dự án quét bằng `packages/shared/src/dlp.ts` trước khi lưu/giữ
+  định mức/gửi AI (chặn → 422, cảnh báo → 428 + `dlpAcknowledged`, che → `[CCCD_1]`…, khôi phục khi trả lời).
+  Chính sách `settings/dlp`. Audit `DLP_ACTION` chỉ ghi loại + số lượng, không ghi giá trị.
 - Chat có fallback 1 lần (chỉ trước khi stream chữ), circuit breaker và kill switch `settings/killSwitch` (listener,
   < 5 giây) – ADR 0009. AI cần người dùng đã đồng ý `TERMS_VERSION` (`packages/shared/src/terms.ts`); đổi nội dung
   điều khoản thì tăng phiên bản.

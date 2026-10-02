@@ -14,6 +14,7 @@ import {
   AuditStore,
   ConversationStore,
   DepartmentStore,
+  DlpPolicyStore,
   FileStore,
   GcsBlobStore,
   getDb,
@@ -72,6 +73,8 @@ import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
 import { CircuitBreaker } from './resilience/circuit-breaker.js';
 import { RouterController } from './router/router.controller.js';
+import { DlpController } from './dlp/dlp.controller.js';
+import { DLP_POLICY_STORE, DlpService } from './dlp/dlp.service.js';
 import { ROUTER_CONFIG_STORE, RouterService } from './router/router.service.js';
 import { KillSwitchController } from './resilience/kill-switch.controller.js';
 import { KILL_SWITCH_STORE, KillSwitchService } from './resilience/kill-switch.service.js';
@@ -121,6 +124,7 @@ export class AppModule {
         FilesController,
         KillSwitchController,
         RouterController,
+        DlpController,
         KnowledgeController,
         KnowledgeChatController,
         PromptsController,
@@ -199,6 +203,8 @@ export class AppModule {
         KillSwitchService,
         { provide: ROUTER_CONFIG_STORE, useFactory: () => new RouterConfigStore(getDb()) },
         RouterService,
+        { provide: DLP_POLICY_STORE, useFactory: () => new DlpPolicyStore(getDb()) },
+        DlpService,
         { provide: CircuitBreaker, useFactory: () => new CircuitBreaker() },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },

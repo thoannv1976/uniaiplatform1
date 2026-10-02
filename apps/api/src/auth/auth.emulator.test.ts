@@ -1,5 +1,11 @@
 import type { INestApplication } from '@nestjs/common';
-import { DEFAULT_ROUTER_CONFIG, ROLES, TERMS_VERSION, type Role } from '@uniai/shared';
+import {
+  DEFAULT_DLP_POLICY,
+  DEFAULT_ROUTER_CONFIG,
+  ROLES,
+  TERMS_VERSION,
+  type Role,
+} from '@uniai/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -418,6 +424,21 @@ describe('role matrix', () => {
       name: 'POST /api/admin/router/test',
       call: () => http().post('/api/admin/router/test').send({ text: 'Xin chào' }),
       allowed: ['super_admin', 'ai_admin'],
+    },
+    {
+      name: 'GET /api/admin/dlp-rules',
+      call: () => http().get('/api/admin/dlp-rules'),
+      allowed: ['super_admin', 'auditor'],
+    },
+    {
+      name: 'PUT /api/admin/dlp-rules',
+      call: () => http().put('/api/admin/dlp-rules').send(DEFAULT_DLP_POLICY),
+      allowed: ['super_admin'],
+    },
+    {
+      name: 'POST /api/admin/dlp-rules/test',
+      call: () => http().post('/api/admin/dlp-rules/test').send({ text: 'Xin chào' }),
+      allowed: ['super_admin'],
     },
     {
       name: 'GET /api/admin/knowledge-bases',

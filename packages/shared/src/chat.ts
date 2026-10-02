@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DLP_DETECTORS } from './dlp.js';
 import { attachmentRefSchema, fileIdSchema, MAX_FILES_PER_MESSAGE } from './files.js';
 
 /** Max knowledge bases consulted for one message (M13). */
@@ -65,6 +66,8 @@ export const chatRequestSchema = z
       .array(z.string().regex(/^[A-Za-z0-9]{1,64}$/, 'Mã kho không hợp lệ'))
       .max(MAX_KNOWLEDGE_BASES_PER_MESSAGE)
       .optional(),
+    /** The user confirmed sending after a DLP warning (428, M15). */
+    dlpAcknowledged: z.boolean().optional(),
   })
   .strict();
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -194,6 +197,15 @@ export const chatStreamEventSchema = z.discriminatedUnion('type', [
   }),
   /** Knowledge-base passages given to the model, before the answer (M13). */
   z.object({ type: z.literal('citations'), citations: z.array(citationSchema) }),
+  /**
+   * DLP (M15): what was masked before sending (placeholders in the answer are restored by
+   * the server) or sent after the user's confirmation. Counts only, never the values.
+   */
+  z.object({
+    type: z.literal('dlp'),
+    masked: z.array(z.object({ detector: z.enum(DLP_DETECTORS), count: z.number().int() })),
+    acknowledged: z.array(z.enum(DLP_DETECTORS)),
+  }),
   z.object({ type: z.literal('delta'), text: z.string() }),
   z.object({
     type: z.literal('done'),
