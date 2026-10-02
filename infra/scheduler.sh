@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cloud Scheduler jobs for the worker (M7, spec 8.7). Run in Cloud Shell as a project Owner:
+# Cloud Scheduler jobs for the worker (M7 spec 8.7, M8 spec 8.13). Run in Cloud Shell as a project Owner:
 #   bash infra/scheduler.sh --dry-run     # show what would change
 #   bash infra/scheduler.sh               # apply (staging and, once deployed, production)
 #
@@ -57,6 +57,7 @@ fi
 JOBS=(
   "quota-rollover|5 0 1 * *|/jobs/quota-rollover|Mở kỳ định mức tháng mới cho mọi người dùng"
   "reservation-sweeper|*/5 * * * *|/jobs/reservation-sweeper|Hoàn trả định mức giữ tạm quá 10 phút, thu hồi cấp tạm hết hạn"
+  "usage-aggregate|*/5 * * * *|/jobs/usage-aggregate|Tổng hợp chi phí cho dashboard, cập nhật ngân sách đơn vị, gửi cảnh báo"
 )
 
 for env in staging production; do

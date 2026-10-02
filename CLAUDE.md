@@ -19,7 +19,8 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081); job `/jobs/*` do Cloud Scheduler gọi (`infra/scheduler.sh`)
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
-  `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái)
+  `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái),
+  `QuotaService` (định mức, ADR 0006), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `SettingsStore`
 - `packages/ai-providers` – interface `LLMProvider`; adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
   `MockProvider`; `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
 
@@ -50,6 +51,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - Tiền: số nguyên micro-USD, chỉ dùng `packages/shared/src/money.ts`. Không dùng số thực cho tiền.
 - Trừ định mức chỉ qua `QuotaService` (`packages/firestore/src/quota.ts`, reserve → commit/release trong transaction,
   ADR 0006); không ghi vào `budgetPeriods` theo từng yêu cầu. Hết định mức → 402, quá nhanh → 429 + Retry-After.
+- Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
+  sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager
   (`<provider>-api-key[-staging]`, chọn theo database), Firestore chỉ giữ `last4` (ADR 0002).
 - Giá model là số nguyên micro-USD/1M token, chỉ thêm bản ghi giá mới (`models/{id}/prices`), không sửa giá cũ.

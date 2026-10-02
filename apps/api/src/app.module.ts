@@ -6,8 +6,11 @@ import {
   ConversationStore,
   DepartmentStore,
   getDb,
+  AlertService,
   QuotaService,
   RegistryStore,
+  SettingsStore,
+  UsageAggregator,
   UserStore,
 } from '@uniai/firestore';
 import { ModelsController } from './ai/models.controller.js';
@@ -42,6 +45,9 @@ import { DirectoryController } from './directory/directory.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
 import { AdminQuotaController, MyQuotaController } from './quota/quota.controller.js';
+import { DashboardService } from './usage/dashboard.service.js';
+import { AGGREGATOR, ALERTS, FIRESTORE, SETTINGS } from './usage/tokens.js';
+import { AdminUsageController, MyUsageController } from './usage/usage.controller.js';
 import { AdminUsersController } from './users/admin-users.controller.js';
 
 export interface AppOverrides {
@@ -75,6 +81,8 @@ export class AppModule {
         ConversationsController,
         MyQuotaController,
         AdminQuotaController,
+        MyUsageController,
+        AdminUsageController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -107,6 +115,11 @@ export class AppModule {
         ChatService,
         { provide: CONVERSATION_STORE, useFactory: () => new ConversationStore(getDb()) },
         { provide: QUOTA_SERVICE, useFactory: () => new QuotaService(getDb()) },
+        { provide: FIRESTORE, useFactory: () => getDb() },
+        { provide: AGGREGATOR, useFactory: () => new UsageAggregator(getDb()) },
+        { provide: ALERTS, useFactory: () => new AlertService(getDb()) },
+        { provide: SETTINGS, useFactory: () => new SettingsStore(getDb()) },
+        DashboardService,
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: DomainErrorFilter },

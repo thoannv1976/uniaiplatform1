@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_USER } from './e2e-user';
 
-// Plan M6: sign in (emulator) → chat → streamed answer → cost shown.
+// Plan M6: sign in (emulator) → chat → streamed answer → cost shown; M8: my usage.
 test.skip(!process.env.FIRESTORE_EMULATOR_HOST, 'cần Firebase Emulator (pnpm test:e2e)');
 
 test('đăng nhập, chat với AUTO, nhận câu trả lời dạng stream và thấy chi phí', async ({ page }) => {
@@ -27,4 +27,9 @@ test('đăng nhập, chat với AUTO, nhận câu trả lời dạng stream và 
   // Reloading shows the stored conversation.
   await page.reload();
   await expect(page.getByText('[mock:mock-economy] Xin chào từ kiểm thử e2e')).toBeVisible();
+
+  // M8: personal usage comes straight from the ledger.
+  await page.getByRole('link', { name: 'Mức sử dụng' }).click();
+  await expect(page.getByRole('heading', { name: 'Mức sử dụng của tôi' })).toBeVisible();
+  await expect(page.getByText('Mock Economy')).toBeVisible();
 });

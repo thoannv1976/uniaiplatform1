@@ -14,6 +14,7 @@ import {
   quotaPeriodOf,
   type Budget,
   type ChatUsage,
+  type ModelTier,
   type ProviderId,
   type QuotaAdjustment,
   type QuotaAdjustmentRequest,
@@ -56,6 +57,8 @@ export interface ReserveInput {
   providerId: ProviderId;
   transport: Transport;
   modelId: string;
+  /** Registry tier of the model (dashboard: share by model tier). */
+  modelTier?: ModelTier;
   apiModelId: string;
   priceId: string;
   conversationId: string | null;
@@ -296,6 +299,7 @@ export class QuotaService {
         providerId: input.providerId,
         transport: input.transport,
         modelId: input.modelId,
+        modelTier: input.modelTier ?? null,
         apiModelId: input.apiModelId,
         priceId: input.priceId,
         premium: input.premium,

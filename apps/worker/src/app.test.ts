@@ -12,6 +12,10 @@ const jobs: WorkerJobs = {
   rollover: () => (calls.push('rollover'), Promise.resolve({ period: '202610', created: 3 })),
   sweepReservations: () => (calls.push('sweep'), Promise.resolve(2)),
   expireAdjustments: () => (calls.push('expire'), Promise.resolve(1)),
+  aggregateUsage: () => (
+    calls.push('aggregate'),
+    Promise.resolve({ period: '202610', added: 5, alerts: 1 })
+  ),
 };
 
 beforeAll(async () => {
@@ -46,6 +50,11 @@ describe('worker', () => {
       released: 2,
       reverted: 1,
     });
-    expect(calls).toEqual(['rollover', 'sweep', 'expire']);
+    expect((await request(server).post('/jobs/usage-aggregate').expect(200)).body).toEqual({
+      period: '202610',
+      added: 5,
+      alerts: 1,
+    });
+    expect(calls).toEqual(['rollover', 'sweep', 'expire', 'aggregate']);
   });
 });

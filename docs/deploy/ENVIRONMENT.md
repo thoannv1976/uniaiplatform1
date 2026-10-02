@@ -2,7 +2,10 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M7 (Claude Code): Cloud Scheduler `uniai-quota-rollover-*` (00:05 ngày 1),
+Cập nhật lần cuối: 02/10/2026 – M8 (Claude Code): job `uniai-usage-aggregate-*` (5 phút, `infra/scheduler.sh`),
+index `usageTransactions (status, committedAt)` và `(uid, period, status)`; script tùy chọn `infra/billing-budget.sh`
+(D7: 30.000.000 ₫/tháng, 50/90/100 %), `infra/alerts.sh` (email cảnh báo chi phí), `infra/bigquery.sh` (dataset
+`uniai_analytics`). Trước đó – M7 (Claude Code): Cloud Scheduler `uniai-quota-rollover-*` (00:05 ngày 1),
 `uniai-reservation-sweeper-*` (5 phút) qua `infra/scheduler.sh`; collection định mức/ngân sách. Trước đó – M5 (Claude Code): index `conversations`, `usageTransactions` và TTL `expireAt`
 (khai trong `firestore.indexes.json`, deploy tự áp dụng). Trước đó – M4 (Claude Code): thêm 3 secret API key riêng cho staging (cần chạy lại bootstrap),
 biến `VERTEX_LOCATION`, `ENABLE_MOCK_PROVIDER`; collection `providers`, `models`. Trước đó (01/10): bootstrap đã chạy
@@ -26,16 +29,22 @@ Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 
 ### Dữ liệu Firestore (M2, xem ADR 0003)
 
-| Collection                               | Nội dung                                                                           | Ghi bởi                                              |
-| ---------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `userDirectory/{email}`                  | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                             | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
-| `users/{uid}`                            | Hồ sơ tạo khi đăng nhập lần đầu                                                    | API                                                  |
-| `auditLogs`                              | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`) | API, script ops                                      |
-| `departments/{id}`                       | Cây đơn vị (M3)                                                                    | trang quản trị, nhập CSV                             |
-| `providers/{id}`                         | Cách gọi, bật/tắt, thứ tự dự phòng, **metadata** key (`last4`) – không có key (M4) | trang quản trị                                       |
-| `conversations/{id}`, `…/messages/{mid}` | Hội thoại riêng của từng người; `expireAt` + TTL 180 ngày (D8) (M5)                | API (`/api/ai/chat`, `/api/conversations`)           |
-| `usageTransactions/{id}`                 | Sổ cái chi phí, chỉ thêm, không TTL (M5)                                           | API                                                  |
-| `models/{id}`, `…/prices/{pid}`          | Model Registry và lịch sử giá micro-USD/1M token, chỉ thêm (M4)                    | trang quản trị (**Nạp danh mục mẫu**)                |
+| Collection                               | Nội dung                                                                            | Ghi bởi                                              |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `userDirectory/{email}`                  | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                              | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
+| `users/{uid}`                            | Hồ sơ tạo khi đăng nhập lần đầu                                                     | API                                                  |
+| `auditLogs`                              | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`)  | API, script ops                                      |
+| `departments/{id}`                       | Cây đơn vị (M3)                                                                     | trang quản trị, nhập CSV                             |
+| `providers/{id}`                         | Cách gọi, bật/tắt, thứ tự dự phòng, **metadata** key (`last4`) – không có key (M4)  | trang quản trị                                       |
+| `conversations/{id}`, `…/messages/{mid}` | Hội thoại riêng của từng người; `expireAt` + TTL 180 ngày (D8) (M5)                 | API (`/api/ai/chat`, `/api/conversations`)           |
+| `usageTransactions/{id}`                 | Sổ cái chi phí, chỉ thêm, không TTL (M5)                                            | API                                                  |
+| `models/{id}`, `…/prices/{pid}`          | Model Registry và lịch sử giá micro-USD/1M token, chỉ thêm (M4)                     | trang quản trị (**Nạp danh mục mẫu**)                |
+| `quotaPeriods/{uid}_{YYYYMM}`            | Định mức tháng, đã dùng, đang giữ tạm, đếm tốc độ (M7, ADR 0006)                    | API (QuotaService), worker                           |
+| `budgetPeriods/{dept}_{YYYYMM}`          | Ngân sách đơn vị; `usedAggregate` do job tổng hợp cập nhật (M7/M8)                  | trang quản trị, worker                               |
+| `quotaTiers/{id}`, `quotaAdjustments`    | Nhóm định mức; điều chỉnh có lý do + người duyệt (M7)                               | trang quản trị, worker (thu hồi cấp tạm)             |
+| `usageAggregates/{YYYYMM}`, `…/days/{d}` | Tổng chi phí theo nhà cung cấp/model/nhóm/đơn vị/ngày; `_checkpoint` (M8, ADR 0007) | worker (`/jobs/usage-aggregate`)                     |
+| `notifications`, `alertStates/{key}`     | Thông báo trong ứng dụng; chống gửi trùng mỗi ngưỡng mỗi kỳ (M8)                    | API, worker                                          |
+| `settings/app`                           | Tỷ giá hiển thị VND/USD (mặc định 26.000) (M8)                                      | Super Admin (trang Thống kê)                         |
 
 Super Admin: staging = _chưa cấp_; production = _chưa cấp_.
 

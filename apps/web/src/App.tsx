@@ -11,6 +11,9 @@ import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AccountPanel } from './components/AccountPanel';
 import { ApiStatus } from './components/ApiStatus';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { DashboardPage } from './usage/DashboardPage';
+import { MyUsagePage } from './usage/MyUsagePage';
+import { NotificationBell } from './usage/NotificationBell';
 import { ROLE_LABELS_VI } from '@uniai/shared';
 
 // Markdown, math and code highlighting are only loaded once someone opens the chat.
@@ -30,7 +33,9 @@ export const ADMIN_PATHS = {
   providers: '/quan-tri/nha-cung-cap',
   chatTest: '/quan-tri/thu-chat',
   quotas: '/quan-tri/dinh-muc',
+  dashboard: '/quan-tri/thong-ke',
 } as const;
+export const MY_USAGE_PATH = '/muc-su-dung';
 
 /** First admin page a role may open. */
 function adminHome(role: Role): string {
@@ -50,11 +55,15 @@ function Home() {
           <span>
             {profile.profile.name ?? profile.profile.email} · {ROLE_LABELS_VI[role]}
           </span>
+          <Link to={MY_USAGE_PATH} className="text-sky-800 underline">
+            Mức sử dụng
+          </Link>
           {DEPARTMENT_VIEWERS.includes(role) && (
             <Link to={adminHome(role)} className="text-sky-800 underline">
               Trang quản trị
             </Link>
           )}
+          <NotificationBell getToken={getToken} />
           <button type="button" className="text-sky-800 underline" onClick={() => void signOut()}>
             Đăng xuất
           </button>
@@ -122,6 +131,9 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         <NavLink to={ADMIN_PATHS.departments} className={tabClass}>
           Đơn vị
         </NavLink>
+        <NavLink to={ADMIN_PATHS.dashboard} className={tabClass}>
+          Thống kê
+        </NavLink>
         {REGISTRY_VIEWERS.includes(role) && (
           <>
             <NavLink to={ADMIN_PATHS.models} className={tabClass}>
@@ -145,6 +157,22 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
       </nav>
       {children(role)}
     </section>
+  );
+}
+
+function MyUsageRoute() {
+  const { profile, getToken } = useAuth();
+  if (profile.kind === 'loading') return <p>Đang tải…</p>;
+  if (profile.kind !== 'ok' || profile.profile.status !== 'active') {
+    return <Navigate to="/" replace />;
+  }
+  return (
+    <>
+      <Link to="/" className="text-sm text-sky-800 underline">
+        ← Trang chủ
+      </Link>
+      <MyUsagePage getToken={getToken} />
+    </>
   );
 }
 
@@ -240,6 +268,14 @@ function AdminPages() {
           </AdminRoute>
         }
       />
+      <Route
+        path="thong-ke"
+        element={
+          <AdminRoute roles={DEPARTMENT_VIEWERS}>
+            {(role) => <DashboardPage role={role} getToken={getToken} />}
+          </AdminRoute>
+        }
+      />
       <Route path="nguoi-dung" element={<Navigate to={ADMIN_PATHS.accounts} replace />} />
       <Route path="*" element={<Navigate to={me ? adminHome(me.role) : '/'} replace />} />
     </Routes>
@@ -263,10 +299,11 @@ export function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/hoi-thoai/:conversationId" element={<Home />} />
+            <Route path={MY_USAGE_PATH} element={<MyUsageRoute />} />
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M7</footer>
+          <footer className="text-xs text-slate-400">Bản phát triển – milestone M8</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

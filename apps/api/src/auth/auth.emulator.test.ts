@@ -309,6 +309,42 @@ describe('role matrix', () => {
       allowed: ['super_admin', 'unit_admin'],
     },
     {
+      name: 'GET /api/me/usage',
+      call: () => http().get('/api/me/usage'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'GET /api/me/notifications',
+      call: () => http().get('/api/me/notifications'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'POST /api/me/notifications/read',
+      call: () => http().post('/api/me/notifications/read').send({}),
+      allowed: [...ROLES],
+      ok: 204,
+    },
+    {
+      name: 'GET /api/admin/dashboard',
+      call: () => http().get('/api/admin/dashboard'),
+      allowed: ['super_admin', 'ai_admin', 'auditor', 'unit_admin'],
+    },
+    {
+      name: 'GET /api/admin/usage/export.csv',
+      call: () => http().get('/api/admin/usage/export.csv?kind=users'),
+      allowed: ['super_admin', 'auditor', 'unit_admin'],
+    },
+    {
+      name: 'GET /api/admin/settings/exchange-rate',
+      call: () => http().get('/api/admin/settings/exchange-rate'),
+      allowed: ['super_admin', 'ai_admin', 'auditor', 'unit_admin'],
+    },
+    {
+      name: 'PUT /api/admin/settings/exchange-rate',
+      call: () => http().put('/api/admin/settings/exchange-rate').send({ vndPerUsd: 25_500 }),
+      allowed: ['super_admin'],
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],
