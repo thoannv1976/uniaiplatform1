@@ -1,4 +1,7 @@
 import {
+  killSwitchSchema,
+  type KillSwitch,
+  type UpdateKillSwitchRequest,
   createFileResponseSchema,
   fileViewSchema,
   type FileView,
@@ -493,5 +496,29 @@ export async function uploadFile(idToken: string, file: File): Promise<FileView>
   }
   return fileViewSchema.parse(
     await call(`/api/files/${created.file.id}/complete`, idToken, { method: 'POST' }),
+  );
+}
+
+// ---- M10: terms, kill switch ----
+
+export async function acceptTerms(idToken: string, version: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/me/terms`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+  });
+  if (!res.ok) throw await readError(res);
+}
+
+export async function fetchKillSwitch(idToken: string): Promise<KillSwitch> {
+  return killSwitchSchema.parse(await call('/api/admin/kill-switch', idToken));
+}
+
+export async function updateKillSwitch(
+  idToken: string,
+  value: UpdateKillSwitchRequest,
+): Promise<KillSwitch> {
+  return killSwitchSchema.parse(
+    await call('/api/admin/kill-switch', idToken, { method: 'PUT', body: JSON.stringify(value) }),
   );
 }

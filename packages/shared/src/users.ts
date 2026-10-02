@@ -24,6 +24,8 @@ export const userProfileSchema = z.object({
   scopeDepartmentId: z.string().nullable(),
   createdAt: z.string(),
   lastLoginAt: z.string().nullable(),
+  /** Version of the terms of use the user accepted (spec 12); null = not yet. */
+  termsVersion: z.string().nullable(),
 });
 export type UserProfile = z.infer<typeof userProfileSchema>;
 
@@ -49,6 +51,11 @@ export const AUDIT_EVENTS = [
   'QUOTA_CHANGE',
   'BUDGET_CHANGE',
   'DOCUMENT_UPLOAD',
+  'AI_REQUEST',
+  'MODEL_ROUTED',
+  'FALLBACK_USED',
+  'API_ERROR',
+  'TERMS_ACCEPTED',
 ] as const;
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];
 

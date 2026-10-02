@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_USER } from './e2e-user';
 
-// Plan M6: sign in (emulator) → chat → streamed answer → cost shown; M8: my usage; M9: attachment.
+// Plan M6: sign in (emulator) → chat → streamed answer → cost shown; M8: my usage; M9: attachment; M10: terms.
 test.skip(!process.env.FIRESTORE_EMULATOR_HOST, 'cần Firebase Emulator (pnpm test:e2e)');
 
 test('đăng nhập, chat với AUTO, nhận câu trả lời dạng stream và thấy chi phí', async ({ page }) => {
@@ -10,6 +10,10 @@ test('đăng nhập, chat với AUTO, nhận câu trả lời dạng stream và 
   await page.getByLabel('Email').fill(E2E_USER.email);
   await page.getByLabel('Mật khẩu').fill(E2E_USER.password);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+
+  // M10: terms of use at first sign-in.
+  await page.getByLabel('Tôi đã đọc và đồng ý với Điều khoản sử dụng.').check();
+  await page.getByRole('button', { name: 'Đồng ý và tiếp tục' }).click();
 
   await expect(page.getByText('Bạn cần hỗ trợ gì hôm nay?')).toBeVisible();
   const box = page.getByLabel('Tin nhắn');

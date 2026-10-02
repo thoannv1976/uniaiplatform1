@@ -105,6 +105,10 @@ export class AlertService {
     await batch.commit();
   }
 
+  async superAdmins(): Promise<string[]> {
+    return this.admins();
+  }
+
   /** Super admins plus the unit admins of a department (for unit and university alerts). */
   private async admins(departmentId?: string): Promise<string[]> {
     const users = this.db.collection(COLLECTIONS.users);

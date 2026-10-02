@@ -9,7 +9,8 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
   API key do Admin nhập → Secret Manager theo ADR 0002).
 - GCP project `uniaiplatform1`, vùng `asia-southeast1`. Claude Code không có quyền vào GCP;
   deploy chạy qua GitHub Actions (`.github/workflows/deploy.yml`: `main` → staging, tag `v*` → production),
-  thao tác hạ tầng do Claude Cowork làm theo runbook `docs/deploy/Mx-runbook.md` và `infra/bootstrap.sh`.
+  thao tác hạ tầng do Claude Cowork làm theo runbook `docs/deploy/Mx-runbook.md` và `infra/*.sh`.
+  Vận hành: `docs/deploy/RUNBOOK-VAN-HANH.md`; go-live: `docs/deploy/GO-LIVE-CHECKLIST.md`.
 - Image Cloud Run: `Dockerfile` ở gốc repo, `--build-arg APP=api|worker`.
 
 ## Cấu trúc
@@ -53,6 +54,9 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   ADR 0006); không ghi vào `budgetPeriods` theo từng yêu cầu. Hết định mức → 402, quá nhanh → 429 + Retry-After.
 - Tệp đính kèm chỉ qua `/api/files` (signed URL PUT lên `gs://uniaiplatform1-uploads`, ADR 0008); API kiểm tra byte
   đầu và trích văn bản, chỉ giữ văn bản đã trích (hoặc ảnh). Không ghi tên/nội dung tệp vào log hay audit.
+- Chat có fallback 1 lần (chỉ trước khi stream chữ), circuit breaker và kill switch `settings/killSwitch` (listener,
+  < 5 giây) – ADR 0009. AI cần người dùng đã đồng ý `TERMS_VERSION` (`packages/shared/src/terms.ts`); đổi nội dung
+  điều khoản thì tăng phiên bản.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
   sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

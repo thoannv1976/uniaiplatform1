@@ -8,6 +8,9 @@ import {
 import {
   CHAT_MODEL_AUTO,
   isPremiumTier,
+  killSwitchBlocks,
+  PROVIDER_LABELS_VI,
+  type KillSwitch,
   MODEL_TIER_LABELS_VI,
   MODEL_TIERS,
   type ChatModelOption,
@@ -18,6 +21,8 @@ import {
 } from '@uniai/shared';
 import { RegistryCache } from '../ai/registry-cache.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
+import { CircuitBreaker } from '../resilience/circuit-breaker.js';
+import { KillSwitchService } from '../resilience/kill-switch.service.js';
 
 export interface Route {
   model: ModelView;
@@ -40,7 +45,14 @@ export class ModelRouter {
   constructor(
     private readonly cache: RegistryCache,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly killSwitch: KillSwitchService,
+    private readonly circuit: CircuitBreaker,
   ) {}
+
+  /** Not stopped by the kill switch and the provider's circuit is closed. */
+  private open(model: ModelView, ks: KillSwitch): boolean {
+    return killSwitchBlocks(ks, model) === null && this.circuit.openFor(model.providerId) === 0;
+  }
 
   /** Active, priced, provider ready, and mock only where it is enabled. */
   private usable(models: ModelView[], providers: ProviderView[]) {
@@ -71,9 +83,13 @@ export class ModelRouter {
 
   /** Models the user may pick, cheapest tier first. */
   async options(role: Role): Promise<ChatModelOption[]> {
-    const { models, providers } = await this.cache.get();
+    const [{ models, providers }, ks] = await Promise.all([
+      this.cache.get(),
+      this.killSwitch.current(),
+    ]);
     return this.usable(models, providers)
       .filter(({ model }) => ModelRouter.allowed(model, role))
+      .filter(({ model }) => killSwitchBlocks(ks, model) === null)
       .sort(ModelRouter.rank)
       .map(({ model }) => ({
         id: model.id,
@@ -89,9 +105,17 @@ export class ModelRouter {
     role: Role,
     options: { excludePremium?: boolean; requireImage?: boolean } = {},
   ): Promise<Route> {
-    const { models, providers } = await this.cache.get();
+    const [{ models, providers }, ks] = await Promise.all([
+      this.cache.get(),
+      this.killSwitch.current(),
+    ]);
     const usable = this.usable(models, providers);
     const readsImages = (m: ModelView) => m.capabilities.includes('image');
+    if (ks.all) {
+      throw new ServiceUnavailableException(
+        `Hệ thống AI đang tạm dừng.${ks.reason ? ` Lý do: ${ks.reason}` : ''}`,
+      );
+    }
 
     if (requested === CHAT_MODEL_AUTO) {
       const tiers = options.excludePremium
@@ -100,7 +124,13 @@ export class ModelRouter {
       const best = usable
         .filter(({ model }) => tiers.includes(model.tier))
         .filter(({ model }) => !options.requireImage || readsImages(model))
+        .filter(({ model }) => this.open(model, ks))
         .sort(ModelRouter.rank)[0];
+      if (!best && ks.reason && (ks.providers.length || ks.models.length || ks.tiers.length)) {
+        throw new ServiceUnavailableException(
+          `Các model AI phù hợp đang tạm dừng. Lý do: ${ks.reason}`,
+        );
+      }
       if (!best && options.requireImage) {
         throw new BadRequestException('Chưa có model AI nào đọc được ảnh. Hãy gửi tệp văn bản.');
       }
@@ -125,11 +155,51 @@ export class ModelRouter {
         `Bạn chưa được cấp quyền dùng model ${match.model.displayName}.`,
       );
     }
+    const blocked = killSwitchBlocks(ks, match.model);
+    if (blocked) throw new ServiceUnavailableException(`${match.model.displayName}: ${blocked}`);
+    const wait = this.circuit.openFor(match.model.providerId);
+    if (wait > 0) {
+      throw new ServiceUnavailableException(
+        `${PROVIDER_LABELS_VI[match.model.providerId]} đang tạm ngắt do lỗi liên tục. Thử lại sau ${wait} giây hoặc chọn AUTO.`,
+      );
+    }
     if (options.requireImage && !readsImages(match.model)) {
       throw new BadRequestException(
         `Model ${match.model.displayName} không đọc được ảnh. Hãy chọn AUTO hoặc model hỗ trợ ảnh.`,
       );
     }
     return { ...match, reason: 'Người dùng chọn model' };
+  }
+
+  /**
+   * Fallback (spec 8.8): an equivalent model – same tier, another provider – that is usable
+   * now and fits the request. Null when there is none.
+   */
+  async fallback(
+    failed: Route,
+    role: Role,
+    options: { requireImage?: boolean } = {},
+  ): Promise<Route | null> {
+    const [{ models, providers }, ks] = await Promise.all([
+      this.cache.get(),
+      this.killSwitch.current(),
+    ]);
+    if (ks.all) return null;
+    const next = this.usable(models, providers)
+      .filter(
+        ({ model }) =>
+          model.tier === failed.model.tier &&
+          model.providerId !== failed.model.providerId &&
+          ModelRouter.allowed(model, role) &&
+          (!options.requireImage || model.capabilities.includes('image')) &&
+          this.open(model, ks),
+      )
+      .sort(ModelRouter.rank)[0];
+    return next
+      ? {
+          ...next,
+          reason: `Dự phòng: ${failed.model.displayName} lỗi – chuyển sang ${next.model.displayName}`,
+        }
+      : null;
   }
 }
