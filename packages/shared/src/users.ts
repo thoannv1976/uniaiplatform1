@@ -56,6 +56,7 @@ export const AUDIT_EVENTS = [
   'FALLBACK_USED',
   'API_ERROR',
   'TERMS_ACCEPTED',
+  'KNOWLEDGE_UPDATE',
 ] as const;
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];
 

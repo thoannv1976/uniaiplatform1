@@ -7,3 +7,4 @@ export * from './gemini.js';
 export * from './factory.js';
 export * from './secrets.js';
 export * from './probe.js';
+export * from './embeddings.js';

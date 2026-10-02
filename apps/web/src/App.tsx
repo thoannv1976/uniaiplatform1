@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-rou
 import { ChatTestPage } from './admin/ChatTestPage';
 import { DepartmentsPage } from './admin/DepartmentsPage';
 import { KillSwitchPage } from './admin/KillSwitchPage';
+import { KnowledgePage } from './admin/KnowledgePage';
 import { RouterPage } from './admin/RouterPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
@@ -39,6 +40,7 @@ export const ADMIN_PATHS = {
   dashboard: '/quan-tri/thong-ke',
   killSwitch: '/quan-tri/kill-switch',
   router: '/quan-tri/dinh-tuyen',
+  knowledge: '/quan-tri/kho-tri-thuc',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
 
@@ -158,6 +160,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         {QUOTA_VIEWERS.includes(role) && (
           <NavLink to={ADMIN_PATHS.quotas} className={tabClass}>
             Định mức
+          </NavLink>
+        )}
+        {REGISTRY_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.knowledge} className={tabClass}>
+            Kho tri thức
           </NavLink>
         )}
         {REGISTRY_VIEWERS.includes(role) && (
@@ -285,6 +292,16 @@ function AdminPages() {
                 canEditTiers={role === 'super_admin'}
                 getToken={getToken}
               />
+            )}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="kho-tri-thuc"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => (
+              <KnowledgePage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />
             )}
           </AdminRoute>
         }

@@ -44,6 +44,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@google-cloud/tasks':
+        specifier: ^7.2.1
+        version: 7.2.1
       '@nestjs/common':
         specifier: ^12.1.2
         version: 12.1.2(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -56,15 +59,15 @@ importers:
       '@uniai/ai-providers':
         specifier: workspace:*
         version: link:../../packages/ai-providers
+      '@uniai/documents':
+        specifier: workspace:*
+        version: link:../../packages/documents
       '@uniai/firestore':
         specifier: workspace:*
         version: link:../../packages/firestore
       '@uniai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      fflate:
-        specifier: ^0.8.3
-        version: 0.8.3
       firebase-admin:
         specifier: ^14.5.0
         version: 14.5.0(@firebase/app-compat@0.5.18)(@firebase/app@0.16.2)
@@ -74,9 +77,6 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
-      unpdf:
-        specifier: ^1.8.1
-        version: 1.8.1
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -190,6 +190,12 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.1.2
         version: 12.1.2(@nestjs/common@12.1.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.2)
+      '@uniai/ai-providers':
+        specifier: workspace:*
+        version: link:../../packages/ai-providers
+      '@uniai/documents':
+        specifier: workspace:*
+        version: link:../../packages/documents
       '@uniai/firestore':
         specifier: workspace:*
         version: link:../../packages/firestore
@@ -251,6 +257,24 @@ importers:
       zod:
         specifier: ^4.6.5
         version: 4.6.5
+
+  packages/documents:
+    dependencies:
+      '@uniai/ai-providers':
+        specifier: workspace:*
+        version: link:../ai-providers
+      '@uniai/firestore':
+        specifier: workspace:*
+        version: link:../firestore
+      '@uniai/shared':
+        specifier: workspace:*
+        version: link:../shared
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+      unpdf:
+        specifier: ^1.8.1
+        version: 1.8.1
 
   packages/firestore:
     dependencies:
@@ -804,6 +828,10 @@ packages:
 
   '@google-cloud/storage@8.2.0':
     resolution: {integrity: sha512-7ckgSjeEprV92VrlLjpYFA3PFerflvFtF7Ea86oQXGNCprGZq5rtpAVK0zgWnCy+44mLjms42M7MiWa433gz2A==}
+    engines: {node: '>=22'}
+
+  '@google-cloud/tasks@7.2.1':
+    resolution: {integrity: sha512-Izjk4BY7XzqARntecPaHqWq+gVGjstugVaVzqBe3fWAmM6NHBnaiRy8hpggRkO9SVc2/ZCofl/K/28ttnUXkSg==}
     engines: {node: '>=22'}
 
   '@google/genai@2.26.0':
@@ -6167,6 +6195,12 @@ snapshots:
       - supports-color
     optional: true
 
+  '@google-cloud/tasks@7.2.1':
+    dependencies:
+      google-gax: 6.10.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@google/genai@2.26.0(@modelcontextprotocol/sdk@1.31.0(zod@4.6.5))':
     dependencies:
       google-auth-library: 10.9.1
@@ -8619,7 +8653,6 @@ snapshots:
       retry-request: 9.0.1
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   google-logging-utils@0.0.2: {}
 
@@ -10123,7 +10156,6 @@ snapshots:
   proto3-json-serializer@4.0.2:
     dependencies:
       protobufjs: 7.6.6
-    optional: true
 
   protobufjs@7.6.6:
     dependencies:
@@ -10389,7 +10421,6 @@ snapshots:
       teeny-request: 11.0.1
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   retry@0.13.1: {}
 
@@ -10787,7 +10818,6 @@ snapshots:
       stream-events: 1.0.5
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   teex@1.0.1:
     dependencies:

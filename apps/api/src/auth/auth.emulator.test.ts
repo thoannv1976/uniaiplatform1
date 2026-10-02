@@ -420,6 +420,66 @@ describe('role matrix', () => {
       allowed: ['super_admin', 'ai_admin'],
     },
     {
+      name: 'GET /api/admin/knowledge-bases',
+      call: () => http().get('/api/admin/knowledge-bases'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'POST /api/admin/knowledge-bases',
+      call: () => http().post('/api/admin/knowledge-bases').send({ name: 'K', aclScopeId: null }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 201,
+    },
+    {
+      name: 'PATCH /api/admin/knowledge-bases/:id',
+      call: () => http().patch('/api/admin/knowledge-bases/missing').send({ active: false }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'GET /api/admin/knowledge-bases/:id/documents',
+      call: () => http().get('/api/admin/knowledge-bases/missing/documents'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+      ok: 404,
+    },
+    {
+      name: 'POST /api/admin/knowledge-bases/:id/documents',
+      call: () =>
+        http()
+          .post('/api/admin/knowledge-bases/missing/documents')
+          .send({ title: 'T', fileName: 'a.pdf', mime: 'application/pdf', size: 1 }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'PUT /api/admin/kb-documents/:id/content',
+      call: () =>
+        http()
+          .put('/api/admin/kb-documents/missing/content')
+          .set('Content-Type', 'application/pdf')
+          .send(Buffer.from('%PDF-')),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'POST /api/admin/kb-documents/:id/complete',
+      call: () => http().post('/api/admin/kb-documents/missing/complete'),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'POST /api/admin/kb-documents/:id/retry',
+      call: () => http().post('/api/admin/kb-documents/missing/retry'),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 409,
+    },
+    {
+      name: 'DELETE /api/admin/kb-documents/:id',
+      call: () => http().delete('/api/admin/kb-documents/missing'),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],

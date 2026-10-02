@@ -20,8 +20,9 @@ export async function createApp(
   // Local development only: uploads PUT to the API (FILE_UPLOAD_MODE=proxy).
   app.useBodyParser('raw', {
     type: (req: { method?: string; url?: string }) =>
-      req.method === 'PUT' && /^\/api\/files\/[^/]+\/content/.test(req.url ?? ''),
-    limit: config.fileMaxBytes,
+      req.method === 'PUT' &&
+      /^\/api\/(files|admin\/kb-documents)\/[^/]+\/content/.test(req.url ?? ''),
+    limit: Math.max(config.fileMaxBytes, 50 * 1024 * 1024),
   });
   app.enableCors({
     origin: config.webOrigins,

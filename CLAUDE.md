@@ -22,7 +22,8 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
   `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái),
   `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `SettingsStore`
-- `packages/ai-providers` – interface `LLMProvider`; adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
+- `packages/documents` – trích nội dung PDF/DOCX/XLSX/PPTX/văn bản, chia đoạn, `ingestDocument` (kho tri thức)
+- `packages/ai-providers` – interface `LLMProvider`; `Embedder` (Vertex AI / `MockEmbedder`); adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
   `MockProvider`; ảnh trong tin nhắn (`images`); `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
 
 ## Lệnh
@@ -57,6 +58,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - Chat có fallback 1 lần (chỉ trước khi stream chữ), circuit breaker và kill switch `settings/killSwitch` (listener,
   < 5 giây) – ADR 0009. AI cần người dùng đã đồng ý `TERMS_VERSION` (`packages/shared/src/terms.ts`); đổi nội dung
   điều khoản thì tăng phiên bản.
+- Kho tri thức (ADR 0011): tài liệu xử lý qua Cloud Tasks → worker `/jobs/kb-ingest` (cục bộ: ngay trong API);
+  embedding 768 chiều, index vector `chunks`. Test dùng `MockEmbedder`, không gọi Vertex AI.
 - AUTO đi qua Smart Router (`classifyRequest`, luật trong `settings/router`, ADR 0010); lý do định tuyến luôn
   ghi sổ cái. Không gọi AI để phân loại.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
