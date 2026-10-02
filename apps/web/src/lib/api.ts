@@ -1,4 +1,12 @@
 import {
+  dashboardSchema,
+  exchangeRateSchema,
+  myUsageSchema,
+  notificationListResponseSchema,
+  type AppNotification,
+  type Dashboard,
+  type MyUsage,
+  type UsageExportKind,
   budgetListResponseSchema,
   quotaAdjustmentListResponseSchema,
   quotaAdjustmentSchema,
@@ -177,7 +185,11 @@ export async function importCsv(
 
 /** Downloads an export as a file in the browser. */
 export async function downloadExport(idToken: string, target: ImportTarget, filename: string) {
-  const res = await fetch(`${API_URL}/api/admin/${target}/export.csv`, {
+  await downloadCsv(idToken, `/api/admin/${target}/export.csv`, filename);
+}
+
+async function downloadCsv(idToken: string, path: string, filename: string) {
+  const res = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${idToken}` },
   });
   if (!res.ok) throw await readError(res);
@@ -398,4 +410,58 @@ export async function updateQuotaTier(
   return quotaTierSchema.parse(
     await call(`/api/admin/quota-tiers/${id}`, idToken, { method: 'PATCH', body }),
   );
+}
+
+// ---- M8: usage, dashboards, notifications ----
+
+export async function fetchDashboard(
+  idToken: string,
+  period?: string,
+  departmentId?: string,
+): Promise<Dashboard> {
+  const query = new URLSearchParams();
+  if (period) query.set('period', period);
+  if (departmentId) query.set('departmentId', departmentId);
+  const qs = query.size ? `?${query.toString()}` : '';
+  return dashboardSchema.parse(await call(`/api/admin/dashboard${qs}`, idToken));
+}
+
+export async function downloadUsageExport(idToken: string, kind: UsageExportKind, period: string) {
+  await downloadCsv(
+    idToken,
+    `/api/admin/usage/export.csv?kind=${kind}&period=${period}`,
+    `chi-phi-ai-${kind}-${period}.csv`,
+  );
+}
+
+export async function fetchExchangeRate(idToken: string): Promise<number> {
+  return exchangeRateSchema.parse(await call('/api/admin/settings/exchange-rate', idToken))
+    .vndPerUsd;
+}
+
+export async function setExchangeRate(idToken: string, vndPerUsd: number): Promise<number> {
+  const body = JSON.stringify({ vndPerUsd });
+  return exchangeRateSchema.parse(
+    await call('/api/admin/settings/exchange-rate', idToken, { method: 'PUT', body }),
+  ).vndPerUsd;
+}
+
+export async function fetchMyUsage(idToken: string, period?: string): Promise<MyUsage> {
+  const query = period ? `?period=${period}` : '';
+  return myUsageSchema.parse(await call(`/api/me/usage${query}`, idToken));
+}
+
+export async function fetchNotifications(
+  idToken: string,
+): Promise<{ notifications: AppNotification[]; unread: number }> {
+  return notificationListResponseSchema.parse(await call('/api/me/notifications', idToken));
+}
+
+export async function markNotificationsRead(idToken: string, ids?: string[]): Promise<void> {
+  const res = await fetch(`${API_URL}/api/me/notifications/read`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(ids ? { ids } : {}),
+  });
+  if (!res.ok) throw await readError(res);
 }

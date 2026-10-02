@@ -8,6 +8,7 @@ import {
 import type { LLMProvider, ChatMessage as ProviderMessage } from '@uniai/ai-providers';
 import {
   QuotaError,
+  type AlertService,
   type ConversationStore,
   type QuotaService,
   type Reservation,
@@ -29,6 +30,7 @@ import {
 import type { Response } from 'express';
 import { ProviderRuntime, ProviderUnavailableError } from '../ai/provider-runtime.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
+import { ALERTS } from '../usage/tokens.js';
 import { ModelRouter, type Route } from './model-router.js';
 
 export const CONVERSATION_STORE = Symbol('CONVERSATION_STORE');
@@ -116,6 +118,7 @@ export class ChatService {
     private readonly runtime: ProviderRuntime,
     @Inject(CONVERSATION_STORE) private readonly conversations: ConversationStore,
     @Inject(QUOTA_SERVICE) private readonly quota: QuotaService,
+    @Inject(ALERTS) private readonly alerts: AlertService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -159,6 +162,7 @@ export class ChatService {
         providerId: r.model.providerId,
         transport: r.provider.transport,
         modelId: r.model.id,
+        modelTier: r.model.tier,
         apiModelId: r.model.apiModelId,
         priceId: r.model.currentPrice!.id,
         conversationId: req.conversationId ?? null,
@@ -345,7 +349,7 @@ export class ChatService {
     // Settle even when the user cancelled: the ledger is the source of truth for cost.
     try {
       if (usage && cost !== null) {
-        await this.quota.commit(reservation, {
+        const after = await this.quota.commit(reservation, {
           usage,
           costInput: tokenCost(usage.inputTokens, price.inputPerMTok),
           costCachedInput: tokenCost(
@@ -360,6 +364,14 @@ export class ChatService {
           latencyMs,
           responseTime,
         });
+        // In-app alert at 80 % of the monthly quota (spec 8.13), checked right after settling.
+        if (after) {
+          void this.alerts
+            .checkUser(user.uid, reservation.period, after.used - cost, after.used, after.limit)
+            .catch((err: unknown) =>
+              this.logger.warn(`Không gửi được cảnh báo định mức: ${String(err)}`),
+            );
+        }
       } else {
         await this.quota.release(reservation);
       }

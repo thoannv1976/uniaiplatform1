@@ -16,11 +16,12 @@ import type { WorkerConfig } from './config.js';
 const CONFIG = Symbol('WORKER_CONFIG');
 const JOBS = Symbol('WORKER_JOBS');
 
-/** What the scheduled jobs need; QuotaService implements it (injected for tests). */
+/** What the scheduled jobs need (QuotaService + runUsageJob; injected for tests). */
 export interface WorkerJobs {
   rollover(now?: Date): Promise<{ period: string; created: number }>;
   sweepReservations(now?: Date): Promise<number>;
   expireAdjustments(now?: Date): Promise<number>;
+  aggregateUsage(now?: Date): Promise<{ period: string; added: number; alerts: number }>;
 }
 
 /**
@@ -68,6 +69,15 @@ class JobsController {
     this.logger.log(JSON.stringify({ job: 'reservation-sweeper', released, reverted }));
     return { released, reverted };
   }
+
+  /** Every 5 minutes: fold the ledger into dashboard totals, update budgets, raise alerts. */
+  @Post('usage-aggregate')
+  @HttpCode(200)
+  async aggregate() {
+    const result = await this.jobs.aggregateUsage();
+    this.logger.log(JSON.stringify({ job: 'usage-aggregate', ...result }));
+    return result;
+  }
 }
 
 export async function createWorker(
@@ -83,8 +93,15 @@ export async function createWorker(
         // Firestore is only loaded when the worker really runs the jobs.
         useFactory: async (): Promise<WorkerJobs> => {
           if (options.jobs) return options.jobs;
-          const { getDb, QuotaService } = await import('@uniai/firestore');
-          return new QuotaService(getDb());
+          const { getDb, QuotaService, runUsageJob } = await import('@uniai/firestore');
+          const db = getDb();
+          const quota = new QuotaService(db);
+          return {
+            rollover: (now) => quota.rollover(now),
+            sweepReservations: (now) => quota.sweepReservations(now),
+            expireAdjustments: (now) => quota.expireAdjustments(now),
+            aggregateUsage: (now) => runUsageJob(db, now),
+          };
         },
       },
     ],

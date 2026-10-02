@@ -11,3 +11,7 @@ export * from './registry-catalog.js';
 export * from './conversations.js';
 export * from './usage.js';
 export * from './quota.js';
+export * from './aggregate.js';
+export * from './alerts.js';
+export * from './jobs.js';
+export * from './settings.js';
