@@ -46,9 +46,9 @@ describe('ConversationStore', () => {
 
     const third = await turn(first!.conversationId, 'Câu tiếp theo');
     expect(third?.history).toEqual([
-      { role: 'user', content: 'Tóm tắt quy chế đào tạo\nchi tiết' },
-      { role: 'assistant', content: 'Đây là tóm tắt.' },
-      { role: 'user', content: 'Câu hỏi lỗi' },
+      { role: 'user', content: 'Tóm tắt quy chế đào tạo\nchi tiết', attachments: [] },
+      { role: 'assistant', content: 'Đây là tóm tắt.', attachments: [] },
+      { role: 'user', content: 'Câu hỏi lỗi', attachments: [] },
     ]);
 
     const conv = await store.get(first!.conversationId, 'u1');

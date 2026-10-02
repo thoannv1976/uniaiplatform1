@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { attachmentRefSchema, fileIdSchema, MAX_FILES_PER_MESSAGE } from './files.js';
 import { MODEL_TIERS, modelIdSchema, PROVIDER_IDS } from './models.js';
 
 /**
@@ -31,6 +32,11 @@ export const chatRequestSchema = z
       .max(MAX_MESSAGE_CHARS, `Tin nhắn tối đa ${MAX_MESSAGE_CHARS.toLocaleString('vi-VN')} ký tự`),
     /** "auto" (default) lets the router choose; otherwise a registry model id. */
     model: z.union([z.literal(CHAT_MODEL_AUTO), modelIdSchema]).default(CHAT_MODEL_AUTO),
+    /** Uploaded files (POST /api/files) to attach to this message. */
+    fileIds: z
+      .array(fileIdSchema)
+      .max(MAX_FILES_PER_MESSAGE, `Tối đa ${MAX_FILES_PER_MESSAGE} tệp mỗi tin nhắn`)
+      .optional(),
   })
   .strict();
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -60,6 +66,8 @@ export const messageSchema = z.object({
   stopReason: z.string().nullable(),
   error: errorInfoSchema.nullable(),
   latencyMs: z.number().int().nullable(),
+  /** Files attached to a user message. */
+  attachments: z.array(attachmentRefSchema),
   createdAt: z.string(),
 });
 export type ChatMessage = z.infer<typeof messageSchema>;

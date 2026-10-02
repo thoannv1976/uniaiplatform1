@@ -15,3 +15,4 @@ export * from './aggregate.js';
 export * from './alerts.js';
 export * from './jobs.js';
 export * from './settings.js';
+export * from './files.js';

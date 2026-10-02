@@ -122,9 +122,9 @@ jobs:
             --region="$REGION" \
             --service-account="uniai-api@${PROJECT_ID}.iam.gserviceaccount.com" \
             --allow-unauthenticated \
-            --timeout=900 --concurrency=80 --memory=512Mi \
+            --timeout=900 --concurrency=80 --memory=1Gi \
             --min-instances=0 --max-instances="$MAX_INSTANCES" \
-            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS};VERTEX_LOCATION=global;ENABLE_MOCK_PROVIDER=${ENABLE_MOCK}" \
+            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS};VERTEX_LOCATION=global;ENABLE_MOCK_PROVIDER=${ENABLE_MOCK};FILES_BUCKET=${PROJECT_ID}-uploads" \
             --quiet
 
       - name: Deploy Cloud Run – worker (không công khai)

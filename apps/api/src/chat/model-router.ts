@@ -87,10 +87,11 @@ export class ModelRouter {
   async choose(
     requested: string,
     role: Role,
-    options: { excludePremium?: boolean } = {},
+    options: { excludePremium?: boolean; requireImage?: boolean } = {},
   ): Promise<Route> {
     const { models, providers } = await this.cache.get();
     const usable = this.usable(models, providers);
+    const readsImages = (m: ModelView) => m.capabilities.includes('image');
 
     if (requested === CHAT_MODEL_AUTO) {
       const tiers = options.excludePremium
@@ -98,7 +99,11 @@ export class ModelRouter {
         : AUTO_TIERS;
       const best = usable
         .filter(({ model }) => tiers.includes(model.tier))
+        .filter(({ model }) => !options.requireImage || readsImages(model))
         .sort(ModelRouter.rank)[0];
+      if (!best && options.requireImage) {
+        throw new BadRequestException('Chưa có model AI nào đọc được ảnh. Hãy gửi tệp văn bản.');
+      }
       if (!best) {
         throw new ServiceUnavailableException(
           'Chưa có model AI nào sẵn sàng. Vui lòng liên hệ quản trị viên.',
@@ -106,7 +111,7 @@ export class ModelRouter {
       }
       return {
         ...best,
-        reason: `AUTO: nhóm ${MODEL_TIER_LABELS_VI[best.model.tier]}, ưu tiên cao nhất`,
+        reason: `AUTO: nhóm ${MODEL_TIER_LABELS_VI[best.model.tier]}, ưu tiên cao nhất${options.requireImage ? ', đọc được ảnh' : ''}`,
       };
     }
 
@@ -118,6 +123,11 @@ export class ModelRouter {
     if (!ModelRouter.allowed(match.model, role)) {
       throw new ForbiddenException(
         `Bạn chưa được cấp quyền dùng model ${match.model.displayName}.`,
+      );
+    }
+    if (options.requireImage && !readsImages(match.model)) {
+      throw new BadRequestException(
+        `Model ${match.model.displayName} không đọc được ảnh. Hãy chọn AUTO hoặc model hỗ trợ ảnh.`,
       );
     }
     return { ...match, reason: 'Người dùng chọn model' };

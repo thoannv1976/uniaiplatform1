@@ -183,6 +183,26 @@ describe.each(adapters)('$name adapter contract', (a) => {
     ]);
   });
 
+  it('sends attached images in the provider format', async () => {
+    const http = replay(a.fixtures.ok);
+    const withImage: NormalizedChatRequest = {
+      ...request,
+      messages: [
+        ...request.messages.slice(0, -1),
+        {
+          role: 'user',
+          content: 'Ảnh này là gì?',
+          images: [{ mime: 'image/png', data: 'iVBORw0K' }],
+        },
+      ],
+    };
+    expectContract(await collect(a.make(http.fetch).stream(withImage)));
+    const body = JSON.stringify(http.requests[0]!.body);
+    expect(body).toContain('iVBORw0K');
+    expect(body).toContain('Ảnh này là gì?');
+    expect(body).toMatch(/"input_image"|"type":"image"|"inlineData"/);
+  });
+
   it('reports max_tokens', async () => {
     const { chunks } = await run(a, 'maxTokens');
     expect(chunks.at(-1)).toEqual({ type: 'done', stopReason: 'max_tokens' });
@@ -225,6 +245,16 @@ describe.each(adapters)('$name adapter contract', (a) => {
 });
 
 describe('Mock adapter contract', () => {
+  it('mentions attached images in its echo', async () => {
+    const chunks = await collect(
+      new MockProvider().stream({
+        ...request,
+        messages: [{ role: 'user', content: 'Xem', images: [{ mime: 'image/png', data: 'x' }] }],
+      }),
+    );
+    expect(textOf(chunks)).toBe('[mock:test-model@20251001] [1 ảnh] Xem');
+  });
+
   it('keeps the same invariants', async () => {
     expectContract(await collect(new MockProvider().stream(request)));
     expectContract(await collect(new MockProvider({ failAfterWords: 2 }).stream(request)));

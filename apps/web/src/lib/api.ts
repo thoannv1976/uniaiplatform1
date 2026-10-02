@@ -1,4 +1,7 @@
 import {
+  createFileResponseSchema,
+  fileViewSchema,
+  type FileView,
   dashboardSchema,
   exchangeRateSchema,
   myUsageSchema,
@@ -464,4 +467,31 @@ export async function markNotificationsRead(idToken: string, ids?: string[]): Pr
     body: JSON.stringify(ids ? { ids } : {}),
   });
   if (!res.ok) throw await readError(res);
+}
+
+// ---- M9: attachments ----
+
+/**
+ * Uploads a chat attachment: register it (POST /api/files), PUT the bytes to the signed
+ * Cloud Storage URL (or to the API in local development), then let the API check it and
+ * extract its text. Resolves with the ready file; rejects with a Vietnamese message.
+ */
+export async function uploadFile(idToken: string, file: File): Promise<FileView> {
+  const created = createFileResponseSchema.parse(
+    await call('/api/files', idToken, {
+      method: 'POST',
+      body: JSON.stringify({ name: file.name, mime: file.type, size: file.size }),
+    }),
+  );
+  const target = created.upload;
+  const headers = new Headers(target.headers);
+  if (target.withAuth) headers.set('Authorization', `Bearer ${idToken}`);
+  const url = target.url.startsWith('/') ? `${API_URL}${target.url}` : target.url;
+  const put = await fetch(url, { method: target.method, headers, body: file });
+  if (!put.ok) {
+    throw new ApiError(put.status, `Tải tệp lên không thành công (mã ${put.status}).`);
+  }
+  return fileViewSchema.parse(
+    await call(`/api/files/${created.file.id}/complete`, idToken, { method: 'POST' }),
+  );
 }

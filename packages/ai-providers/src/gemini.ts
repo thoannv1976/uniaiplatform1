@@ -68,7 +68,12 @@ export class GeminiProvider implements LLMProvider {
       .filter((m) => m.role !== 'system')
       .map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
+        parts: [
+          ...(m.images ?? []).map((img) => ({
+            inlineData: { mimeType: img.mime, data: img.data },
+          })),
+          { text: m.content },
+        ],
       }));
 
     let text = '';

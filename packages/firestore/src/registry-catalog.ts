@@ -153,7 +153,7 @@ export const DEFAULT_MODELS: CreateModelRequest[] = [
     status: 'active',
     contextWindow: 128_000,
     maxOutputTokens: 4_096,
-    capabilities: ['text'],
+    capabilities: ['text', 'image'],
     priority: 0,
     rateLimitPerMinute: null,
     defaultParams: {},

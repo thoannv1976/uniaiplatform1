@@ -10,3 +10,4 @@ export * from './models.js';
 export * from './chat.js';
 export * from './quota.js';
 export * from './usage.js';
+export * from './files.js';

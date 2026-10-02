@@ -6,6 +6,7 @@ import {
 } from 'firebase-admin/firestore';
 import {
   titleFromMessage,
+  type AttachmentRef,
   type ChatMessage,
   type ChatUsage,
   type Conversation,
@@ -46,15 +47,31 @@ function toMessage(snap: DocumentSnapshot): ChatMessage {
     stopReason: d.stopReason ?? null,
     error: d.error ?? null,
     latencyMs: d.latencyMs ?? null,
+    attachments: Array.isArray(d.attachments) ? d.attachments : [],
     createdAt: iso(d.createdAt) ?? new Date(0).toISOString(),
   };
 }
+
+/** A turn the model sees again: text plus the files attached to user messages. */
+export interface HistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  attachments: AttachmentRef[];
+}
+
+// Failed answers and placeholders are not part of the conversation the model sees.
+const toHistory = (messages: ChatMessage[]): HistoryMessage[] =>
+  messages
+    .filter((m) => m.content && (m.role === 'user' || m.status !== 'error'))
+    .map((m) => ({ role: m.role, content: m.content, attachments: m.attachments }));
 
 export interface StartTurnInput {
   ownerUid: string;
   /** null = start a new conversation titled after the message. */
   conversationId: string | null;
   userText: string;
+  /** Files attached to the user message. */
+  attachments?: AttachmentRef[];
   modelId: string;
   providerId: ProviderId;
   /** Content is deleted automatically this many days after it was written (decision D8). */
@@ -66,7 +83,7 @@ export interface StartedTurn {
   userMessageId: string;
   messageId: string;
   /** Earlier messages of the conversation, oldest first (without this turn). */
-  history: { role: 'user' | 'assistant'; content: string }[];
+  history: HistoryMessage[];
 }
 
 export interface FinishTurnInput {
@@ -156,19 +173,11 @@ export class ConversationStore {
   }
 
   /** Earlier turns the model should see (null when the conversation is not the caller's). */
-  async history(
-    id: string,
-    ownerUid: string,
-    limit = 50,
-  ): Promise<{ role: 'user' | 'assistant'; content: string }[] | null> {
+  async history(id: string, ownerUid: string, limit = 50): Promise<HistoryMessage[] | null> {
     const snap = await this.col().doc(id).get();
     if (!snap.exists || snap.get('ownerUid') !== ownerUid) return null;
     const earlier = await this.messages(id).orderBy('seq', 'desc').limit(limit).get();
-    return earlier.docs
-      .map(toMessage)
-      .reverse()
-      .filter((m) => m.content && (m.role === 'user' || m.status !== 'error'))
-      .map((m) => ({ role: m.role, content: m.content }));
+    return toHistory(earlier.docs.map(toMessage).reverse());
   }
 
   /**
@@ -194,12 +203,7 @@ export class ConversationStore {
         const earlier = await tx.get(
           this.messages(ref.id).orderBy('seq', 'desc').limit(historyLimit),
         );
-        history = earlier.docs
-          .map(toMessage)
-          .reverse()
-          // Failed answers and placeholders are not part of the conversation the model sees.
-          .filter((m) => m.content && (m.role === 'user' || m.status !== 'error'))
-          .map((m) => ({ role: m.role, content: m.content }));
+        history = toHistory(earlier.docs.map(toMessage).reverse());
         tx.update(ref, {
           updatedAt: now,
           expireAt,
@@ -231,6 +235,7 @@ export class ConversationStore {
         seq,
         role: 'user',
         content: input.userText,
+        attachments: input.attachments ?? [],
         status: 'complete',
         modelId: null,
         providerId: null,

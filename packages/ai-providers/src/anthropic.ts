@@ -79,7 +79,24 @@ export class AnthropicProvider implements LLMProvider {
       .join('\n\n');
     const messages: Anthropic.MessageParam[] = req.messages
       .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      .map((m): Anthropic.MessageParam =>
+        m.role === 'user' && m.images?.length
+          ? {
+              role: 'user',
+              content: [
+                ...m.images.map((img) => ({
+                  type: 'image' as const,
+                  source: {
+                    type: 'base64' as const,
+                    media_type: img.mime as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+                    data: img.data,
+                  },
+                })),
+                { type: 'text' as const, text: m.content },
+              ],
+            }
+          : { role: m.role as 'user' | 'assistant', content: m.content },
+      );
 
     let text = '';
     let input = 0;

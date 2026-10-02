@@ -1,10 +1,13 @@
 import { Module, type DynamicModule, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { GcpSecretStore, MemorySecretStore, type SecretStore } from '@uniai/ai-providers';
+import type { BlobStore } from '@uniai/firestore';
 import {
   AuditStore,
   ConversationStore,
   DepartmentStore,
+  FileStore,
+  GcsBlobStore,
   getDb,
   AlertService,
   QuotaService,
@@ -42,6 +45,8 @@ import { DomainErrorFilter } from './common/domain-error.filter.js';
 import { APP_CONFIG, type AppConfig } from './config.js';
 import { DEPARTMENT_STORE, DepartmentsController } from './departments/departments.controller.js';
 import { DirectoryController } from './directory/directory.controller.js';
+import { FilesController } from './files/files.controller.js';
+import { BLOB_STORE, FILE_STORE, FilesService } from './files/files.service.js';
 import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
 import { AdminQuotaController, MyQuotaController } from './quota/quota.controller.js';
@@ -58,6 +63,8 @@ export interface AppOverrides {
   secretStore?: SecretStore;
   /** Replaces the real provider adapters, for tests (no network). */
   providerFactory?: ProviderFactory;
+  /** Replaces Cloud Storage, for tests. */
+  blobStore?: BlobStore;
   /** Extra controllers, for tests of the guard itself. */
   extraControllers?: Type[];
 }
@@ -83,6 +90,7 @@ export class AppModule {
         AdminQuotaController,
         MyUsageController,
         AdminUsageController,
+        FilesController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -120,6 +128,12 @@ export class AppModule {
         { provide: ALERTS, useFactory: () => new AlertService(getDb()) },
         { provide: SETTINGS, useFactory: () => new SettingsStore(getDb()) },
         DashboardService,
+        { provide: FILE_STORE, useFactory: () => new FileStore(getDb(), config.filesEnv) },
+        {
+          provide: BLOB_STORE,
+          useFactory: (): BlobStore => overrides.blobStore ?? new GcsBlobStore(config.filesBucket),
+        },
+        FilesService,
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: DomainErrorFilter },

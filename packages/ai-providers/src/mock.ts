@@ -1,5 +1,10 @@
 import { estimateTokens } from './errors.js';
-import type { ChatChunk, LLMProvider, NormalizedChatRequest } from './types.js';
+import {
+  IMAGE_TOKEN_ESTIMATE,
+  type ChatChunk,
+  type LLMProvider,
+  type NormalizedChatRequest,
+} from './types.js';
 
 export { estimateTokens };
 
@@ -37,7 +42,10 @@ export class MockProvider implements LLMProvider {
   constructor(private readonly options: MockProviderOptions = {}) {}
 
   async *stream(req: NormalizedChatRequest, signal?: AbortSignal): AsyncIterable<ChatChunk> {
-    const inputTokens = req.messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+    const inputTokens = req.messages.reduce(
+      (sum, m) => sum + estimateTokens(m.content) + (m.images?.length ?? 0) * IMAGE_TOKEN_ESTIMATE,
+      0,
+    );
 
     const lastUser = [...req.messages].reverse().find((m) => m.role === 'user');
     const directives = parseMockDirectives(lastUser?.content ?? '');
@@ -57,7 +65,10 @@ export class MockProvider implements LLMProvider {
       yield { type: 'text', delta: tick };
       await sleep(1000, signal);
     }
-    const words = `[mock:${req.model}] ${lastUser?.content ?? ''}`.split(/(\s+)/).filter(Boolean);
+    const images = lastUser?.images?.length ? ` [${lastUser.images.length} ảnh]` : '';
+    const words = `[mock:${req.model}]${images} ${lastUser?.content ?? ''}`
+      .split(/(\s+)/)
+      .filter(Boolean);
 
     let stopReason: 'end' | 'max_tokens' | 'cancelled' = 'end';
     let count = 0;
