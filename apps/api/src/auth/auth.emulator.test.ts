@@ -426,6 +426,21 @@ describe('role matrix', () => {
       allowed: ['super_admin', 'ai_admin'],
     },
     {
+      name: 'GET /api/reports/monthly',
+      call: () => http().get('/api/reports/monthly'),
+      allowed: ['super_admin', 'ai_admin', 'auditor', 'unit_admin'],
+    },
+    {
+      name: 'POST /api/admin/reports/monthly',
+      call: () => http().post('/api/admin/reports/monthly').send({ period: '202609' }),
+      allowed: ['super_admin'],
+    },
+    {
+      name: 'GET /api/reports/export',
+      call: () => http().get('/api/reports/export?format=xlsx'),
+      allowed: ['super_admin', 'auditor', 'unit_admin'],
+    },
+    {
       name: 'GET /api/admin/dlp-rules',
       call: () => http().get('/api/admin/dlp-rules'),
       allowed: ['super_admin', 'auditor'],

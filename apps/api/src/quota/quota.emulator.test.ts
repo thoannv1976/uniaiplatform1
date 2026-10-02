@@ -237,6 +237,13 @@ describe('admin quota API', () => {
       .set('Authorization', ka)
       .send({ budget: 3_000_000, reason: 'Chia cho bộ môn' })
       .expect(200);
+    // M16: never more than the parent unit's budget.
+    const over = await http()
+      .put('/api/admin/budgets/KTQT-KTVM')
+      .set('Authorization', ka)
+      .send({ budget: 11_000_000, reason: 'Chia quá tay' });
+    expect(over.status).toBe(400);
+    expect(over.body.message).toMatch(/Vượt ngân sách của đơn vị cha KTQT/);
   });
 
   it('tiers can be changed by the super admin only', async () => {

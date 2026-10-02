@@ -22,11 +22,13 @@ import {
   type KnowledgeBase,
   type UpdateKnowledgeBaseRequest,
   dlpPolicyViewSchema,
+  monthlyReportViewSchema,
   dlpTestResponseSchema,
   routerTestResponseSchema,
   routerViewSchema,
   type RouterConfig,
   type DlpPolicy,
+  type MonthlyReportView,
   type DlpPolicyView,
   type DlpTestResponse,
   type RouterTestResponse,
@@ -226,6 +228,7 @@ export async function downloadExport(idToken: string, target: ImportTarget, file
   await downloadCsv(idToken, `/api/admin/${target}/export.csv`, filename);
 }
 
+/** Fetches an authenticated download (CSV or Excel) and saves it in the browser. */
 async function downloadCsv(idToken: string, path: string, filename: string) {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${idToken}` },
@@ -750,4 +753,32 @@ export async function testDlpRules(idToken: string, text: string): Promise<DlpTe
       body: JSON.stringify({ text }),
     }),
   );
+}
+
+// ---- M16: monthly reports ----
+
+export async function fetchMonthlyReport(
+  idToken: string,
+  period: string,
+): Promise<MonthlyReportView> {
+  return monthlyReportViewSchema.parse(
+    await call(`/api/reports/monthly?period=${encodeURIComponent(period)}`, idToken),
+  );
+}
+
+export async function generateMonthlyReport(
+  idToken: string,
+  period: string,
+): Promise<MonthlyReportView> {
+  return monthlyReportViewSchema.parse(
+    await call('/api/admin/reports/monthly', idToken, {
+      method: 'POST',
+      body: JSON.stringify({ period }),
+    }),
+  );
+}
+
+/** Downloads the Excel workbook of a month (the caller's scope). */
+export async function downloadMonthlyReport(idToken: string, period: string, filename: string) {
+  await downloadCsv(idToken, `/api/reports/export?period=${period}&format=xlsx`, filename);
 }

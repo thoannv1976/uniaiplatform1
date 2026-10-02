@@ -17,3 +17,4 @@ export * from './router.js';
 export * from './knowledge.js';
 export * from './workspace.js';
 export * from './dlp.js';
+export * from './reports.js';

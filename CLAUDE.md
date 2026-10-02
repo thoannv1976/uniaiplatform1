@@ -21,7 +21,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
   `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái),
-  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `SettingsStore`
+  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `MonthlyReportStore` + `runMonthlyReport` (ADR 0015), `DlpPolicyStore`, `SettingsStore`
 - `packages/documents` – trích nội dung PDF/DOCX/XLSX/PPTX/văn bản, chia đoạn, `ingestDocument` (kho tri thức)
 - `packages/ai-providers` – interface `LLMProvider`; `Embedder` (Vertex AI / `MockEmbedder`); adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
   `MockProvider`; ảnh trong tin nhắn (`images`); `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
@@ -69,6 +69,9 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   (hoặc Unit Admin trong phạm vi) chia sẻ; dự án chỉ chủ sở hữu, chỉ dẫn + tệp dự án vào system prompt.
 - AUTO đi qua Smart Router (`classifyRequest`, luật trong `settings/router`, ADR 0010); lý do định tuyến luôn
   ghi sổ cái. Không gọi AI để phân loại.
+- Báo cáo tháng (ADR 0015): `monthlyReports/{YYYYMM}` dựng từ `usageAggregates` (job `/jobs/monthly-report` ngày 1);
+  Unit Admin chỉ thấy cây con (`scopeReport`). Excel qua `apps/api/src/reports/xlsx.ts` (không công thức), audit
+  `REPORT_EXPORT`. Tên miền riêng: `infra/domain.sh` + biến Environment `API_CUSTOM_DOMAIN`/`WEB_CUSTOM_DOMAIN`.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
   sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

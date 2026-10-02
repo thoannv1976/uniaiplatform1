@@ -68,6 +68,9 @@ importers:
       '@uniai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       firebase-admin:
         specifier: ^14.5.0
         version: 14.5.0(@firebase/app-compat@0.5.18)(@firebase/app@0.16.2)
