@@ -52,6 +52,18 @@ const zero = (): Counter => ({
 });
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
 
+/**
+ * Period and Vietnam day of a ledger entry. Entries written before M7 have no `period`:
+ * it is derived from the request time (or the commit time) instead of stopping the job.
+ */
+export function entryTime(e: { get(field: string): unknown }): { period: string; day: string } {
+  const ts = (e.get('requestTime') ?? e.get('committedAt')) as Timestamp | undefined;
+  const day = vnDayOf(ts instanceof Timestamp ? ts.toDate() : new Date(0));
+  const stored = e.get('period');
+  const period = typeof stored === 'string' && /^\d{6}$/.test(stored) ? stored : day.slice(0, 6);
+  return { period, day };
+}
+
 function add(target: Record<string, Counter>, key: string, c: Counter) {
   const t = (target[key] ??= zero());
   t.cost += c.cost;
@@ -134,9 +146,9 @@ export class UsageAggregator {
       const periodKeys = new Set<string>();
       const dayKeys = new Set<string>();
       for (const e of entries.docs) {
-        const period = e.get('period') as string;
+        const { period, day } = entryTime(e);
         periodKeys.add(period);
-        dayKeys.add(`${period}/${vnDayOf((e.get('requestTime') as Timestamp).toDate())}`);
+        dayKeys.add(`${period}/${day}`);
       }
       const periodSnaps = await tx.getAll(...[...periodKeys].map((p) => this.col().doc(p)));
       [...periodKeys].forEach((p, i) => periods.set(p, readPeriod(periodSnaps[i]!, p)));
@@ -148,8 +160,7 @@ export class UsageAggregator {
       [...dayKeys].forEach((k, i) => days.set(k, readDay(daySnaps[i]!, k.split('/')[1]!)));
 
       for (const e of entries.docs) {
-        const period = e.get('period') as string;
-        const day = vnDayOf((e.get('requestTime') as Timestamp).toDate());
+        const { period, day } = entryTime(e);
         const usage = (e.get('usage') ?? {}) as Record<string, unknown>;
         const c: Counter = {
           cost: num(e.get('totalCost')),

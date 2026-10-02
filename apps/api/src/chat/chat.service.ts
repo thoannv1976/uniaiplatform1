@@ -73,7 +73,8 @@ const USER_ERRORS: Record<string, string> = {
   timeout: 'Nhà cung cấp AI phản hồi quá lâu. Vui lòng thử lại.',
   auth: 'Cấu hình nhà cung cấp AI chưa đúng. Vui lòng báo quản trị viên.',
   not_found: 'Model AI không còn khả dụng. Vui lòng báo quản trị viên.',
-  invalid_request: 'Yêu cầu không hợp lệ với model này (có thể quá dài).',
+  invalid_request:
+    'Model này từ chối yêu cầu (nội dung quá dài, hoặc tệp/ảnh đính kèm không được model hỗ trợ). Hãy thử model khác hoặc báo quản trị viên.',
 };
 
 type Turn = { role: 'user' | 'assistant'; content: string; images?: ImageInput[] };
@@ -473,11 +474,17 @@ export class ChatService {
         } else if (chunk.type === 'done') {
           out.stopReason = chunk.stopReason;
         } else {
-          this.logger.warn(
+          // Structured line with a severity, so Cloud Logging files it as a warning; the
+          // detail is the provider's own message (credentials redacted by the adapter).
+          console.log(
             JSON.stringify({
+              severity: 'WARNING',
+              message: `provider_error ${planned.route.model.id} ${chunk.code}`,
               event: 'provider_error',
               model: planned.route.model.id,
+              provider: planned.route.model.providerId,
               code: chunk.code,
+              status: chunk.status ?? null,
               detail: chunk.message,
             }),
           );

@@ -1,4 +1,5 @@
 import { quotaPeriodOf } from '@uniai/shared';
+import { Timestamp } from 'firebase-admin/firestore';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from './admin.js';
 import { UsageAggregator } from './aggregate.js';
@@ -74,6 +75,31 @@ beforeEach(async () => {
 });
 
 describe('UsageAggregator', () => {
+  it('counts ledger entries written before M7 (no period field) instead of stopping', async () => {
+    // As written by the M5/M6 gateway: committed, but without `period`.
+    const at = Timestamp.fromDate(new Date(Date.now() - 3600_000));
+    await db
+      .collection(COLLECTIONS.usageTransactions)
+      .doc('old1')
+      .set({
+        uid: 'a',
+        status: 'committed',
+        committedAt: at,
+        requestTime: at,
+        totalCost: 1234,
+        providerId: 'mock',
+        modelId: 'mock-economy',
+        usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
+      });
+    await spend('b', 'mock-economy', 'mock', 1000);
+    const agg = new UsageAggregator(db);
+    expect(await agg.run(later())).toBe(2);
+    const p = await agg.period(quotaPeriodOf(at.toDate()));
+    expect(p.byModel['mock-economy']?.requests).toBe(2);
+    expect(p.byDepartment._none?.cost).toBe(1234);
+    expect(await agg.run(later())).toBe(0);
+  });
+
   it('matches the ledger exactly, incrementally and without double counting', async () => {
     const costs: number[] = [];
     for (let i = 0; i < 60; i++) {
