@@ -34,6 +34,7 @@ interface UserDoc {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastLoginAt: Timestamp | null;
+  termsVersion?: string | null;
 }
 
 /** Stored shape of userDirectory/{email}. Timestamps are Firestore Timestamps. */
@@ -106,6 +107,7 @@ function toProfile(snap: DocumentSnapshot): UserProfile {
     scopeDepartmentId: d.scopeDepartmentId ?? null,
     createdAt: iso(d.createdAt) ?? new Date(0).toISOString(),
     lastLoginAt: iso(d.lastLoginAt),
+    termsVersion: d.termsVersion ?? null,
   };
 }
 
@@ -239,6 +241,14 @@ export class UserStore {
       const previous = (snap.get('lastLoginAt') as Timestamp | null | undefined) ?? null;
       tx.update(ref, { lastLoginAt: FieldValue.serverTimestamp() });
       return previous ? previous.toDate() : null;
+    });
+  }
+
+  /** Records that the user accepted this version of the terms of use. */
+  async acceptTerms(uid: string, version: string): Promise<void> {
+    await this.userRef(uid).update({
+      termsVersion: version,
+      termsAcceptedAt: FieldValue.serverTimestamp(),
     });
   }
 

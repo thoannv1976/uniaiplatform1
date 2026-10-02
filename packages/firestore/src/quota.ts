@@ -64,6 +64,8 @@ export interface ReserveInput {
   conversationId: string | null;
   routeReason: string;
   fallbackFrom?: string | null;
+  /** Per-user requests per minute for this model (registry); null = no extra limit. */
+  modelRateLimit?: number | null;
   now?: Date;
 }
 
@@ -276,10 +278,32 @@ export class QuotaService {
         );
       }
 
+      // Optional per-model limit (registry rateLimitPerMinute), same one-minute window.
+      const modelRate = (d.modelRate ?? {}) as Record<string, { start: number; count: number }>;
+      let modelWindow = modelRate[input.modelId] ?? { start: 0, count: 0 };
+      if (now.getTime() - modelWindow.start >= WINDOW_MS)
+        modelWindow = { start: now.getTime(), count: 0 };
+      if (input.modelRateLimit && modelWindow.count >= input.modelRateLimit) {
+        const wait = Math.max(1, Math.ceil((modelWindow.start + WINDOW_MS - now.getTime()) / 1000));
+        throw new QuotaError(
+          `Model này giới hạn ${input.modelRateLimit} yêu cầu/phút cho mỗi người. Vui lòng chờ ${wait} giây hoặc chọn AUTO.`,
+          'rate_limited',
+          wait,
+        );
+      }
+
       tx.set(
         ref,
         {
           ...q,
+          ...(input.modelRateLimit
+            ? {
+                modelRate: {
+                  ...modelRate,
+                  [input.modelId]: { start: modelWindow.start, count: modelWindow.count + 1 },
+                },
+              }
+            : {}),
           reserved: q.reserved + input.estimate,
           premiumReserved: q.premiumReserved + (input.premium ? input.estimate : 0),
           rateWindowStart: windowStart,

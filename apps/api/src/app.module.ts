@@ -9,6 +9,7 @@ import {
   FileStore,
   GcsBlobStore,
   getDb,
+  KillSwitchStore,
   AlertService,
   QuotaService,
   RegistryStore,
@@ -49,6 +50,9 @@ import { FilesController } from './files/files.controller.js';
 import { BLOB_STORE, FILE_STORE, FilesService } from './files/files.service.js';
 import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
+import { CircuitBreaker } from './resilience/circuit-breaker.js';
+import { KillSwitchController } from './resilience/kill-switch.controller.js';
+import { KILL_SWITCH_STORE, KillSwitchService } from './resilience/kill-switch.service.js';
 import { AdminQuotaController, MyQuotaController } from './quota/quota.controller.js';
 import { DashboardService } from './usage/dashboard.service.js';
 import { AGGREGATOR, ALERTS, FIRESTORE, SETTINGS } from './usage/tokens.js';
@@ -91,6 +95,7 @@ export class AppModule {
         MyUsageController,
         AdminUsageController,
         FilesController,
+        KillSwitchController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -134,6 +139,9 @@ export class AppModule {
           useFactory: (): BlobStore => overrides.blobStore ?? new GcsBlobStore(config.filesBucket),
         },
         FilesService,
+        { provide: KILL_SWITCH_STORE, useFactory: () => new KillSwitchStore(getDb()) },
+        KillSwitchService,
+        { provide: CircuitBreaker, useFactory: () => new CircuitBreaker() },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: DomainErrorFilter },

@@ -37,7 +37,9 @@ import {
 import type { Response } from 'express';
 import { ProviderRuntime, ProviderUnavailableError } from '../ai/provider-runtime.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
+import { AuditService } from '../audit/audit.service.js';
 import { FilesService, type LoadedAttachment } from '../files/files.service.js';
+import { CircuitBreaker } from '../resilience/circuit-breaker.js';
 import { ALERTS } from '../usage/tokens.js';
 import { ModelRouter, type Route } from './model-router.js';
 
@@ -173,7 +175,8 @@ export function planCost(
 /**
  * The AI Gateway's chat path (spec 5.2): route → resolve provider → reserve quota → store
  * the turn → stream SSE → settle the real cost (also when the user cancels).
- * Fallback (M10) plugs in around `stream`; DLP comes in phase 2.
+ * A provider failing before any text is replaced once by an equivalent model (fallback,
+ * spec 8.8); DLP comes in phase 2.
  */
 @Injectable()
 export class ChatService {
@@ -187,6 +190,8 @@ export class ChatService {
     @Inject(ALERTS) private readonly alerts: AlertService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly files: FilesService,
+    private readonly circuit: CircuitBreaker,
+    private readonly audit: AuditService,
   ) {}
 
   private async resolve(route: Route): Promise<LLMProvider> {
@@ -202,6 +207,46 @@ export class ChatService {
     }
   }
 
+  /** Reserves the worst-case cost of `r` for the messages built for it. */
+  private async plan(
+    user: UserProfile,
+    r: Route,
+    build: (route: Route) => ProviderMessage[],
+    conversationId: string | null,
+    fallbackFrom: string | null = null,
+  ): Promise<Planned> {
+    const messages = build(r);
+    const premium = isPremiumTier(r.model.tier);
+    const summary = await this.quota.summary(user.uid);
+    const room = summary
+      ? premium
+        ? Math.min(summary.remaining, summary.premiumRemaining)
+        : summary.remaining
+      : null;
+    const cost = planCost(
+      estimateInputTokens(messages),
+      Math.min(r.model.maxOutputTokens, MAX_OUTPUT_TOKENS),
+      r.model.currentPrice!,
+      room,
+    );
+    const reservation = await this.quota.reserve({
+      uid: user.uid,
+      estimate: cost.estimate,
+      premium,
+      providerId: r.model.providerId,
+      transport: r.provider.transport,
+      modelId: r.model.id,
+      modelTier: r.model.tier,
+      apiModelId: r.model.apiModelId,
+      priceId: r.model.currentPrice!.id,
+      conversationId,
+      routeReason: r.reason,
+      fallbackFrom,
+      modelRateLimit: r.model.rateLimitPerMinute,
+    });
+    return { route: r, reservation, maxOutputTokens: cost.maxOutputTokens, messages };
+  }
+
   /**
    * Picks the route and reserves its worst-case cost. A model choice that would exceed the
    * premium budget falls back to AUTO (cheaper models), as spec 8.6 asks.
@@ -211,40 +256,11 @@ export class ChatService {
     req: ChatRequest,
     build: (route: Route) => ProviderMessage[],
     requireImage: boolean,
-  ) {
+  ): Promise<Planned> {
     const route = await this.router.choose(req.model, user.role, { requireImage });
-    const plan = async (r: Route) => {
-      const messages = build(r);
-      const premium = isPremiumTier(r.model.tier);
-      const summary = await this.quota.summary(user.uid);
-      const room = summary
-        ? premium
-          ? Math.min(summary.remaining, summary.premiumRemaining)
-          : summary.remaining
-        : null;
-      const cost = planCost(
-        estimateInputTokens(messages),
-        Math.min(r.model.maxOutputTokens, MAX_OUTPUT_TOKENS),
-        r.model.currentPrice!,
-        room,
-      );
-      const reservation = await this.quota.reserve({
-        uid: user.uid,
-        estimate: cost.estimate,
-        premium,
-        providerId: r.model.providerId,
-        transport: r.provider.transport,
-        modelId: r.model.id,
-        modelTier: r.model.tier,
-        apiModelId: r.model.apiModelId,
-        priceId: r.model.currentPrice!.id,
-        conversationId: req.conversationId ?? null,
-        routeReason: r.reason,
-      });
-      return { route: r, reservation, maxOutputTokens: cost.maxOutputTokens, messages };
-    };
+    const conversationId = req.conversationId ?? null;
     try {
-      return await plan(route);
+      return await this.plan(user, route, build, conversationId);
     } catch (err) {
       if (
         !(err instanceof QuotaError && err.code === 'premium_exceeded') ||
@@ -257,10 +273,12 @@ export class ChatService {
         .catch(() => {
           throw err; // no cheaper model: keep the premium-quota message
         });
-      return plan({
-        ...auto,
-        reason: `Hết hạn mức model cao cấp – chuyển sang ${auto.model.displayName}`,
-      });
+      return this.plan(
+        user,
+        { ...auto, reason: `Hết hạn mức model cao cấp – chuyển sang ${auto.model.displayName}` },
+        build,
+        conversationId,
+      );
     }
   }
 
@@ -292,56 +310,155 @@ export class ChatService {
       const next = withAttachments(req.message, attached, budget - req.message.length, vision);
       return buildMessages(turns, next, budget);
     };
-    const { route, reservation, maxOutputTokens, messages } = await this.reserve(
-      user,
-      req,
-      build,
-      attached.some((f) => f.image !== null),
-    );
+    const requireImage = attached.some((f) => f.image !== null);
+    const first = await this.reserve(user, req, build, requireImage);
 
     let provider: LLMProvider;
     let turn;
     try {
-      provider = await this.resolve(route);
+      provider = await this.resolve(first.route);
       turn = await this.conversations.startTurn({
         ownerUid: user.uid,
         conversationId: req.conversationId ?? null,
         userText: req.message,
         attachments: attached.map((f) => f.ref),
-        modelId: route.model.id,
-        providerId: route.model.providerId,
+        modelId: first.route.model.id,
+        providerId: first.route.model.providerId,
         retentionDays: this.config.conversationRetentionDays,
       });
       if (!turn) throw new NotFoundException('Không tìm thấy hội thoại.');
     } catch (err) {
-      await this.quota.release(reservation).catch(() => undefined);
+      await this.quota.release(first.reservation).catch(() => undefined);
       throw err;
     }
-    await this.stream(
-      user,
-      route,
-      provider,
-      reservation,
-      turn,
-      messages,
-      maxOutputTokens,
-      requestTime,
-      res,
-    );
+    await this.stream({ user, req, build, requireImage, turn, requestTime, res }, first, provider);
   }
 
-  private async stream(
-    user: UserProfile,
-    route: Route,
+  /** One call to a provider, forwarding text to the browser as it arrives. */
+  private async attempt(
+    planned: Planned,
     provider: LLMProvider,
-    reservation: Reservation,
-    turn: { conversationId: string; userMessageId: string; messageId: string },
-    messages: ProviderMessage[],
-    maxOutputTokens: number,
-    requestTime: Date,
-    res: Response,
-  ): Promise<void> {
-    const price = route.model.currentPrice!;
+    signal: AbortSignal,
+    onText: (delta: string) => void,
+  ): Promise<Attempt> {
+    const out: Attempt = { text: '', usage: null, stopReason: null, error: null };
+    try {
+      const stream = provider.stream(
+        {
+          model: planned.route.model.apiModelId,
+          messages: planned.messages,
+          maxOutputTokens: planned.maxOutputTokens,
+          reasoningEffort: planned.route.model.defaultParams.reasoningEffort,
+        },
+        signal,
+      );
+      // The user may already have left while the turn was being stored: nothing was sent
+      // to the provider, so there is nothing to bill.
+      if (signal.aborted) {
+        out.stopReason = 'cancelled';
+        return out;
+      }
+      for await (const chunk of stream) {
+        if (chunk.type === 'text') {
+          out.text += chunk.delta;
+          onText(chunk.delta);
+        } else if (chunk.type === 'usage') {
+          out.usage = {
+            inputTokens: chunk.inputTokens,
+            outputTokens: chunk.outputTokens,
+            cachedInputTokens: chunk.cachedInputTokens,
+          };
+        } else if (chunk.type === 'done') {
+          out.stopReason = chunk.stopReason;
+        } else {
+          this.logger.warn(
+            JSON.stringify({
+              event: 'provider_error',
+              model: planned.route.model.id,
+              code: chunk.code,
+              detail: chunk.message,
+            }),
+          );
+          out.error = {
+            code: chunk.code,
+            message: USER_ERRORS[chunk.code] ?? 'Đã có lỗi khi gọi AI.',
+            retryable: chunk.retryable,
+          };
+        }
+      }
+    } catch (err) {
+      // Adapters never throw; this only guards against bugs so the turn is still settled.
+      this.logger.error(`Lỗi gateway: ${String(err)}`);
+      out.error = { code: 'unknown', message: 'Đã có lỗi khi gọi AI.', retryable: false };
+    }
+    return out;
+  }
+
+  /** Commits the tokens of an attempt to the ledger (or releases the reservation). */
+  private async settle(
+    user: UserProfile,
+    planned: Planned,
+    result: Attempt,
+    status: Exclude<MessageStatus, 'streaming'>,
+    turn: { conversationId: string; messageId: string },
+    latencyMs: number,
+    responseTime: Date,
+  ): Promise<number | null> {
+    const price = planned.route.model.currentPrice!;
+    const { usage } = result;
+    const cost = usage ? usageCost(usage, price) : null;
+    // Settle even when the user cancelled: the ledger is the source of truth for cost.
+    try {
+      if (usage && cost !== null) {
+        const after = await this.quota.commit(planned.reservation, {
+          usage,
+          costInput: tokenCost(usage.inputTokens, price.inputPerMTok),
+          costCachedInput: tokenCost(
+            usage.cachedInputTokens,
+            price.cachedInputPerMTok ?? price.inputPerMTok,
+          ),
+          costOutput: tokenCost(usage.outputTokens, price.outputPerMTok),
+          totalCost: cost,
+          outcome: status,
+          messageId: turn.messageId,
+          conversationId: turn.conversationId,
+          latencyMs,
+          responseTime,
+        });
+        // In-app alert at 80 % of the monthly quota (spec 8.13), checked right after settling.
+        if (after) {
+          void this.alerts
+            .checkUser(
+              user.uid,
+              planned.reservation.period,
+              after.used - cost,
+              after.used,
+              after.limit,
+            )
+            .catch((err: unknown) =>
+              this.logger.warn(`Không gửi được cảnh báo định mức: ${String(err)}`),
+            );
+        }
+      } else {
+        await this.quota.release(planned.reservation);
+      }
+    } catch (err) {
+      // The sweeper releases the reservation; a missing commit is logged for reconciliation.
+      this.logger.error(
+        JSON.stringify({
+          event: 'settle_failed',
+          uid: user.uid,
+          txnId: planned.reservation.txnId,
+          cost,
+          detail: String(err),
+        }),
+      );
+    }
+    return cost;
+  }
+
+  private async stream(ctx: StreamContext, first: Planned, firstProvider: LLMProvider) {
+    const { user, turn, res, requestTime } = ctx;
     res.status(200);
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -360,144 +477,218 @@ export class ChatService {
     const heartbeat = setInterval(() => {
       if (!res.destroyed && !res.writableEnded) res.write(': ping\n\n');
     }, HEARTBEAT_MS);
-
-    send({
-      type: 'meta',
-      conversationId: turn.conversationId,
-      userMessageId: turn.userMessageId,
-      messageId: turn.messageId,
-      model: {
-        id: route.model.id,
-        displayName: route.model.displayName,
-        providerId: route.model.providerId,
-        tier: route.model.tier,
-      },
-      routeReason: route.reason,
-    });
-
-    let text = '';
-    let usage: ChatUsage | null = null;
-    let stopReason: string | null = null;
-    let error: { code: string; message: string } | null = null;
-    try {
-      const stream = provider.stream(
-        {
-          model: route.model.apiModelId,
-          messages,
-          maxOutputTokens,
-          reasoningEffort: route.model.defaultParams.reasoningEffort,
+    const sendMeta = (route: Route) =>
+      send({
+        type: 'meta',
+        conversationId: turn.conversationId,
+        userMessageId: turn.userMessageId,
+        messageId: turn.messageId,
+        model: {
+          id: route.model.id,
+          displayName: route.model.displayName,
+          providerId: route.model.providerId,
+          tier: route.model.tier,
         },
-        controller.signal,
-      );
-      // The user may already have left while the turn was being stored: nothing was sent
-      // to the provider, so there is nothing to bill.
-      if (controller.signal.aborted) {
-        stopReason = 'cancelled';
-      } else {
-        for await (const chunk of stream) {
-          if (chunk.type === 'text') {
-            text += chunk.delta;
-            send({ type: 'delta', text: chunk.delta });
-          } else if (chunk.type === 'usage') {
-            usage = {
-              inputTokens: chunk.inputTokens,
-              outputTokens: chunk.outputTokens,
-              cachedInputTokens: chunk.cachedInputTokens,
-            };
-          } else if (chunk.type === 'done') {
-            stopReason = chunk.stopReason;
-          } else {
-            this.logger.warn(
-              JSON.stringify({
-                event: 'provider_error',
-                model: route.model.id,
-                code: chunk.code,
-                detail: chunk.message,
-              }),
-            );
-            error = {
-              code: chunk.code,
-              message: USER_ERRORS[chunk.code] ?? 'Đã có lỗi khi gọi AI.',
-            };
-          }
+        routeReason: route.reason,
+      });
+    sendMeta(first.route);
+    if (first.route.reason !== 'Người dùng chọn model') {
+      this.auditQuietly('MODEL_ROUTED', user.uid, turn, {
+        model: first.route.model.id,
+        reason: first.route.reason,
+      });
+    }
+
+    let planned = first;
+    let provider = firstProvider;
+    let fellBack = false;
+    let result: Attempt;
+    let status: Exclude<MessageStatus, 'streaming'>;
+    try {
+      for (;;) {
+        result = await this.attempt(planned, provider, controller.signal, (delta) =>
+          send({ type: 'delta', text: delta }),
+        );
+        const providerId = planned.route.model.providerId;
+        if (result.error?.retryable) this.circuit.failure(providerId);
+        else if (!result.error) this.circuit.success(providerId);
+        if (result.error) {
+          this.auditQuietly('API_ERROR', user.uid, turn, {
+            model: planned.route.model.id,
+            provider: providerId,
+            code: result.error.code,
+          });
         }
+        status = result.error
+          ? 'error'
+          : result.stopReason === 'cancelled'
+            ? 'cancelled'
+            : 'complete';
+
+        // Fallback (spec 8.8): retryable error or refusal, once, only before any text.
+        const canFallBack =
+          !fellBack &&
+          result.text === '' &&
+          !controller.signal.aborted &&
+          (result.error?.retryable === true || result.stopReason === 'refusal');
+        const next = canFallBack
+          ? await this.router
+              .fallback(planned.route, user.role, { requireImage: ctx.requireImage })
+              .catch(() => null)
+          : null;
+        if (!next) break;
+
+        const now = new Date();
+        await this.settle(
+          user,
+          planned,
+          result,
+          result.error ? 'error' : 'complete',
+          turn,
+          now.getTime() - requestTime.getTime(),
+          now,
+        );
+        const failedModel = planned.route.model.id;
+        let replacement: { planned: Planned; provider: LLMProvider } | null = null;
+        try {
+          const p = await this.plan(user, next, ctx.build, turn.conversationId, failedModel);
+          try {
+            replacement = { planned: p, provider: await this.resolve(next) };
+          } catch (err) {
+            await this.quota.release(p.reservation).catch(() => undefined);
+            throw err;
+          }
+        } catch (err) {
+          this.logger.warn(`Không chuyển được sang model dự phòng: ${String(err)}`);
+        }
+        if (!replacement) {
+          // The failed attempt is already settled: report it as is.
+          const failedCost = result.usage
+            ? usageCost(result.usage, planned.route.model.currentPrice!)
+            : null;
+          return await this.finish(ctx, planned, result, status, failedCost, send, () => {
+            finished = true;
+          });
+        }
+        fellBack = true;
+        this.auditQuietly('FALLBACK_USED', user.uid, turn, {
+          from: failedModel,
+          to: next.model.id,
+          code: result.error?.code ?? result.stopReason,
+        });
+        planned = replacement.planned;
+        provider = replacement.provider;
+        sendMeta(planned.route);
       }
-    } catch (err) {
-      // Adapters never throw; this only guards against bugs so the turn is still settled.
-      this.logger.error(`Lỗi gateway: ${String(err)}`);
-      error = { code: 'unknown', message: 'Đã có lỗi khi gọi AI.' };
     } finally {
       clearInterval(heartbeat);
     }
 
-    const status: Exclude<MessageStatus, 'streaming'> = error
-      ? 'error'
-      : stopReason === 'cancelled'
-        ? 'cancelled'
-        : 'complete';
-    const cost = usage ? usageCost(usage, price) : null;
     const responseTime = new Date();
-    const latencyMs = responseTime.getTime() - requestTime.getTime();
+    const cost = await this.settle(
+      user,
+      planned,
+      result,
+      status,
+      turn,
+      responseTime.getTime() - requestTime.getTime(),
+      responseTime,
+    );
+    await this.finish(ctx, planned, result, status, cost, send, () => {
+      finished = true;
+    });
+  }
 
-    // Settle even when the user cancelled: the ledger is the source of truth for cost.
-    try {
-      if (usage && cost !== null) {
-        const after = await this.quota.commit(reservation, {
-          usage,
-          costInput: tokenCost(usage.inputTokens, price.inputPerMTok),
-          costCachedInput: tokenCost(
-            usage.cachedInputTokens,
-            price.cachedInputPerMTok ?? price.inputPerMTok,
-          ),
-          costOutput: tokenCost(usage.outputTokens, price.outputPerMTok),
-          totalCost: cost,
-          outcome: status,
-          messageId: turn.messageId,
-          conversationId: turn.conversationId,
-          latencyMs,
-          responseTime,
-        });
-        // In-app alert at 80 % of the monthly quota (spec 8.13), checked right after settling.
-        if (after) {
-          void this.alerts
-            .checkUser(user.uid, reservation.period, after.used - cost, after.used, after.limit)
-            .catch((err: unknown) =>
-              this.logger.warn(`Không gửi được cảnh báo định mức: ${String(err)}`),
-            );
-        }
-      } else {
-        await this.quota.release(reservation);
-      }
-    } catch (err) {
-      // The sweeper releases the reservation; a missing commit is logged for reconciliation.
-      this.logger.error(
-        JSON.stringify({
-          event: 'settle_failed',
-          uid: user.uid,
-          txnId: reservation.txnId,
-          cost,
-          detail: String(err),
-        }),
-      );
-    }
+  /** Stores the answer, writes AI_REQUEST and ends the SSE stream. */
+  private async finish(
+    ctx: StreamContext,
+    planned: Planned,
+    result: Attempt,
+    status: Exclude<MessageStatus, 'streaming'>,
+    cost: number | null,
+    send: (e: ChatStreamEvent) => void,
+    markFinished: () => void,
+  ) {
+    const { turn, res } = ctx;
+    const latencyMs = Date.now() - ctx.requestTime.getTime();
+    const error = result.error ? { code: result.error.code, message: result.error.message } : null;
     try {
       await this.conversations.finishTurn(turn.conversationId, turn.messageId, {
-        content: text,
+        content: result.text,
         status,
-        usage,
+        usage: result.usage,
         cost,
-        stopReason,
+        stopReason: result.stopReason,
         error,
         latencyMs,
+        modelId: planned.route.model.id,
+        providerId: planned.route.model.providerId,
       });
     } catch (err) {
       // E.g. the user deleted the conversation while the answer was streaming.
       this.logger.warn(`Không lưu được câu trả lời ${turn.messageId}: ${String(err)}`);
     }
+    this.auditQuietly('AI_REQUEST', ctx.user.uid, turn, {
+      model: planned.route.model.id,
+      provider: planned.route.model.providerId,
+      status,
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      cachedInputTokens: result.usage?.cachedInputTokens ?? 0,
+      cost,
+      latencyMs,
+    });
 
-    finished = true;
+    markFinished();
     if (error) send({ type: 'error', code: error.code, message: error.message });
-    send({ type: 'done', messageId: turn.messageId, status, stopReason, usage, cost, latencyMs });
+    send({
+      type: 'done',
+      messageId: turn.messageId,
+      status,
+      stopReason: result.stopReason,
+      usage: result.usage,
+      cost,
+      latencyMs,
+    });
     if (!res.writableEnded) res.end();
   }
+
+  /** Audit entries on the chat path never fail the request; they carry ids, not content. */
+  private auditQuietly(
+    event: 'AI_REQUEST' | 'MODEL_ROUTED' | 'FALLBACK_USED' | 'API_ERROR',
+    uid: string,
+    turn: { conversationId: string; messageId: string },
+    metadata: Record<string, unknown>,
+  ) {
+    this.audit.recordQuietly({
+      event,
+      actor: uid,
+      target: `conversations/${turn.conversationId}/messages/${turn.messageId}`,
+      metadata,
+    });
+  }
+}
+
+interface Planned {
+  route: Route;
+  reservation: Reservation;
+  maxOutputTokens: number;
+  messages: ProviderMessage[];
+}
+
+interface Attempt {
+  text: string;
+  usage: ChatUsage | null;
+  stopReason: string | null;
+  error: { code: string; message: string; retryable: boolean } | null;
+}
+
+interface StreamContext {
+  user: UserProfile;
+  req: ChatRequest;
+  build: (route: Route) => ProviderMessage[];
+  requireImage: boolean;
+  turn: { conversationId: string; userMessageId: string; messageId: string };
+  requestTime: Date;
+  res: Response;
 }

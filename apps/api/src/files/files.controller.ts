@@ -18,6 +18,7 @@ import {
 import type { AuthContext } from '../auth/auth.guard.js';
 import { CurrentAuth } from '../auth/current-user.js';
 import { AnyRole } from '../auth/decorators.js';
+import { requireTerms } from '../common/terms.js';
 import { parseOrBadRequest } from '../common/zod.js';
 import { FilesService } from './files.service.js';
 
@@ -42,6 +43,7 @@ export class FilesController {
     @CurrentAuth() auth: AuthContext,
     @Body() body: unknown,
   ): Promise<CreateFileResponse> {
+    requireTerms(auth.profile);
     return this.files.create(auth.profile.uid, parseOrBadRequest(createFileRequestSchema, body));
   }
 

@@ -7,7 +7,7 @@ import {
   type ProviderConnection,
 } from '@uniai/ai-providers';
 import { AuditStore, clearFirestoreEmulator, getDb, seed, UserStore } from '@uniai/firestore';
-import type { Role, UserStatus } from '@uniai/shared';
+import { TERMS_VERSION, type Role, type UserStatus } from '@uniai/shared';
 import request from 'supertest';
 import { createApp } from '../app.factory.js';
 import type { AppOverrides } from '../app.module.js';
@@ -56,6 +56,8 @@ export async function startApp(
   const connections: ProviderConnection[] = [];
   /** Every request the gateway sent to a provider. */
   const requests: NormalizedChatRequest[] = [];
+  /** Providers whose (mock) adapter answers with a retryable 503, to test fallback. */
+  const failing = new Set<string>();
   const app = await createApp(
     loadConfig({
       ALLOWED_EMAIL_DOMAINS: 'ftu.edu.vn',
@@ -81,6 +83,16 @@ export async function startApp(
             transport: c.transport,
             stream: (req, signal) => {
               requests.push(req);
+              if (failing.has(c.id)) {
+                return (async function* () {
+                  yield {
+                    type: 'error' as const,
+                    code: 'unavailable',
+                    message: 'HTTP 503',
+                    retryable: true,
+                  };
+                })();
+              }
               return mock.stream(req, signal);
             },
           };
@@ -91,7 +103,7 @@ export async function startApp(
     },
   );
   await app.init();
-  return { app, identity, secrets, connections, requests };
+  return { app, identity, secrets, connections, requests, failing };
 }
 
 export const users = () => new UserStore(getDb());
@@ -108,7 +120,12 @@ export async function givenUser(
   uid: string,
   role: Role,
   status: UserStatus = 'active',
-  extra: { departmentId?: string | null; scopeDepartmentId?: string | null } = {},
+  extra: {
+    departmentId?: string | null;
+    scopeDepartmentId?: string | null;
+    /** Accept the terms of use (default), as an active user normally has. */
+    acceptTerms?: boolean;
+  } = {},
 ) {
   await users().upsertDirectory({
     email: `${uid}@ftu.edu.vn`,
@@ -119,4 +136,7 @@ export async function givenUser(
     updatedBy: 'test',
   });
   await request(app.getHttpServer()).get('/api/me').set('Authorization', tokenFor(uid));
+  if (extra.acceptTerms !== false) {
+    await getDb().collection('users').doc(uid).update({ termsVersion: TERMS_VERSION });
+  }
 }

@@ -16,3 +16,4 @@ export * from './alerts.js';
 export * from './jobs.js';
 export * from './settings.js';
 export * from './files.js';
+export * from './killswitch.js';

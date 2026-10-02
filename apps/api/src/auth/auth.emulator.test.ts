@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { ROLES, type Role } from '@uniai/shared';
+import { ROLES, TERMS_VERSION, type Role } from '@uniai/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -379,6 +379,30 @@ describe('role matrix', () => {
       call: () => http().delete('/api/files/missing'),
       allowed: [...ROLES],
       ok: 404,
+    },
+    {
+      name: 'GET /api/admin/kill-switch',
+      call: () => http().get('/api/admin/kill-switch'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'PUT /api/admin/kill-switch',
+      call: () =>
+        http().put('/api/admin/kill-switch').send({
+          all: false,
+          providers: [],
+          models: [],
+          tiers: [],
+          reason: '',
+          autoBrakePercent: 100,
+        }),
+      allowed: ['super_admin', 'ai_admin'],
+    },
+    {
+      name: 'POST /api/me/terms',
+      call: () => http().post('/api/me/terms').send({ version: TERMS_VERSION }),
+      allowed: [...ROLES],
+      ok: 204,
     },
     {
       name: 'POST /api/admin/models/:id/test',

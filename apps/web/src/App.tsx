@@ -3,6 +3,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-router';
 import { ChatTestPage } from './admin/ChatTestPage';
 import { DepartmentsPage } from './admin/DepartmentsPage';
+import { KillSwitchPage } from './admin/KillSwitchPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
 import { ProvidersPage } from './admin/ProvidersPage';
@@ -10,11 +11,12 @@ import { QuotaPage } from './admin/QuotaPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AccountPanel } from './components/AccountPanel';
 import { ApiStatus } from './components/ApiStatus';
+import { TermsGate } from './components/TermsGate';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { DashboardPage } from './usage/DashboardPage';
 import { MyUsagePage } from './usage/MyUsagePage';
 import { NotificationBell } from './usage/NotificationBell';
-import { ROLE_LABELS_VI } from '@uniai/shared';
+import { ROLE_LABELS_VI, TERMS_VERSION } from '@uniai/shared';
 
 // Markdown, math and code highlighting are only loaded once someone opens the chat.
 const ChatPage = lazy(() => import('./chat/ChatPage').then((m) => ({ default: m.ChatPage })));
@@ -34,6 +36,7 @@ export const ADMIN_PATHS = {
   chatTest: '/quan-tri/thu-chat',
   quotas: '/quan-tri/dinh-muc',
   dashboard: '/quan-tri/thong-ke',
+  killSwitch: '/quan-tri/kill-switch',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
 
@@ -45,9 +48,15 @@ function adminHome(role: Role): string {
 }
 
 function Home() {
-  const { user, profile, signIn, signInWithPassword, signOut, getToken } = useAuth();
+  const { user, profile, signIn, signInWithPassword, signOut, getToken, refreshProfile } =
+    useAuth();
   const role =
     profile.kind === 'ok' && profile.profile.status === 'active' ? profile.profile.role : null;
+  if (role && profile.kind === 'ok' && profile.profile.termsVersion !== TERMS_VERSION) {
+    return (
+      <TermsGate getToken={getToken} onAccepted={refreshProfile} onDecline={() => void signOut()} />
+    );
+  }
   if (role && profile.kind === 'ok') {
     return (
       <>
@@ -147,6 +156,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         {QUOTA_VIEWERS.includes(role) && (
           <NavLink to={ADMIN_PATHS.quotas} className={tabClass}>
             Định mức
+          </NavLink>
+        )}
+        {REGISTRY_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.killSwitch} className={tabClass}>
+            Kill switch
           </NavLink>
         )}
         {REGISTRY_EDITORS.includes(role) && (
@@ -269,6 +283,16 @@ function AdminPages() {
         }
       />
       <Route
+        path="kill-switch"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => (
+              <KillSwitchPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />
+            )}
+          </AdminRoute>
+        }
+      />
+      <Route
         path="thong-ke"
         element={
           <AdminRoute roles={DEPARTMENT_VIEWERS}>
@@ -303,7 +327,7 @@ export function App() {
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M9</footer>
+          <footer className="text-xs text-slate-400">Phiên bản 1.0 – pilot</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

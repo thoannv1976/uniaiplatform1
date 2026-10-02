@@ -94,6 +94,9 @@ export interface FinishTurnInput {
   stopReason: string | null;
   error: { code: string; message: string } | null;
   latencyMs: number;
+  /** The model that really answered, when a fallback replaced the routed one. */
+  modelId?: string;
+  providerId?: ProviderId;
 }
 
 /**
