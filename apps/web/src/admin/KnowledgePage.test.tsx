@@ -69,7 +69,8 @@ describe('KnowledgePage', () => {
     ]);
     render(<KnowledgePage canEdit getToken={getToken} api={api} />);
     expect(await screen.findByText('Phạm vi: Toàn trường')).toBeInTheDocument();
-    const rows = await screen.findAllByRole('row');
+    await screen.findByText('PDF hỏng');
+    const rows = screen.getAllByRole('row');
     expect(rows[1]).toHaveTextContent('Sẵn sàng');
     expect(within(rows[2]!).getByText('PDF hỏng')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Xử lý lại'));
