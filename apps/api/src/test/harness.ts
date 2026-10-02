@@ -10,6 +10,7 @@ import { AuditStore, clearFirestoreEmulator, getDb, seed, UserStore } from '@uni
 import type { Role, UserStatus } from '@uniai/shared';
 import request from 'supertest';
 import { createApp } from '../app.factory.js';
+import type { AppOverrides } from '../app.module.js';
 import type { IdentityAdmin, TokenVerifier } from '../auth/token-verifier.js';
 import { loadConfig } from '../config.js';
 
@@ -45,7 +46,10 @@ export class RecordingIdentityAdmin implements IdentityAdmin {
 export const tokenFor = (uid: string, email = `${uid}@ftu.edu.vn`, verified = true) =>
   `Bearer ${uid}|${email}|${verified ? 1 : 0}`;
 
-export async function startApp(env: Record<string, string> = {}) {
+export async function startApp(
+  env: Record<string, string> = {},
+  extra: Pick<AppOverrides, 'blobStore'> = {},
+) {
   const identity = new RecordingIdentityAdmin();
   const secrets = new MemorySecretStore();
   /** Every adapter the API built, with the key it was given; all of them are mocks. */
@@ -58,10 +62,13 @@ export async function startApp(env: Record<string, string> = {}) {
       EXTRA_ALLOWED_EMAILS: 'breakglass@gmail.com',
       GCLOUD_PROJECT: 'demo-uniai',
       ENABLE_MOCK_PROVIDER: 'true',
+      // Uploads go through the API into the Storage emulator, as in local development.
+      FILE_UPLOAD_MODE: 'proxy',
+      FILES_BUCKET: 'demo-uniai.appspot.com',
       ...env,
     }),
     {
-      quiet: true,
+      quiet: !process.env.DEBUG_APP,
       overrides: {
         tokenVerifier: fakeVerifier,
         identityAdmin: identity,
@@ -79,6 +86,7 @@ export async function startApp(env: Record<string, string> = {}) {
           };
         },
         extraControllers: [UnguardedTestController],
+        ...extra,
       },
     },
   );

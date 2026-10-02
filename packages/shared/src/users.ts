@@ -48,6 +48,7 @@ export const AUDIT_EVENTS = [
   'ADMIN_CHANGE',
   'QUOTA_CHANGE',
   'BUDGET_CHANGE',
+  'DOCUMENT_UPLOAD',
 ] as const;
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];
 

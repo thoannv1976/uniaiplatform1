@@ -20,9 +20,9 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
   `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái),
-  `QuotaService` (định mức, ADR 0006), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `SettingsStore`
+  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `SettingsStore`
 - `packages/ai-providers` – interface `LLMProvider`; adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
-  `MockProvider`; `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
+  `MockProvider`; ảnh trong tin nhắn (`images`); `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
 
 ## Lệnh
 
@@ -31,7 +31,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `pnpm seed` – dữ liệu mẫu vào emulator (từ chối chạy nếu không có emulator)
 - `pnpm lint && pnpm typecheck && pnpm test` – kiểm tra nhanh
 - `pnpm test:emulator` – test cần Firebase Emulator (security rules, Firestore)
-- `pnpm test:e2e` – Playwright chạy trong Firebase Emulator (đăng nhập → chat → chi phí); trong phiên Claude Code trên web,
+- `pnpm test:e2e` – Playwright chạy trong Firebase Emulator Auth/Firestore/Storage (đăng nhập → chat → chi phí); trong phiên Claude Code trên web,
   hook đặt sẵn `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
 - `pnpm format` – Prettier
 - `pnpm ops:grant-role --email … --role … --database … [--allow-outside-domain] [--yes]` – cấp vai trò (Cowork, Cloud Shell)
@@ -51,6 +51,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - Tiền: số nguyên micro-USD, chỉ dùng `packages/shared/src/money.ts`. Không dùng số thực cho tiền.
 - Trừ định mức chỉ qua `QuotaService` (`packages/firestore/src/quota.ts`, reserve → commit/release trong transaction,
   ADR 0006); không ghi vào `budgetPeriods` theo từng yêu cầu. Hết định mức → 402, quá nhanh → 429 + Retry-After.
+- Tệp đính kèm chỉ qua `/api/files` (signed URL PUT lên `gs://uniaiplatform1-uploads`, ADR 0008); API kiểm tra byte
+  đầu và trích văn bản, chỉ giữ văn bản đã trích (hoặc ảnh). Không ghi tên/nội dung tệp vào log hay audit.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
   sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

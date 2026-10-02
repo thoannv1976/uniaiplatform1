@@ -345,6 +345,42 @@ describe('role matrix', () => {
       allowed: ['super_admin'],
     },
     {
+      name: 'POST /api/files',
+      call: () =>
+        http().post('/api/files').send({ name: 'a.pdf', mime: 'application/pdf', size: 10 }),
+      allowed: [...ROLES],
+      ok: 201,
+    },
+    // Owner-only file routes: an unknown id is 404 for every role, never 403.
+    {
+      name: 'GET /api/files/:id',
+      call: () => http().get('/api/files/missing'),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'PUT /api/files/:id/content',
+      call: () =>
+        http()
+          .put('/api/files/missing/content')
+          .set('Content-Type', 'application/pdf')
+          .send(Buffer.from('%PDF-')),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'POST /api/files/:id/complete',
+      call: () => http().post('/api/files/missing/complete'),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'DELETE /api/files/:id',
+      call: () => http().delete('/api/files/missing'),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],

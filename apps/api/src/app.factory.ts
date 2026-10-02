@@ -17,6 +17,12 @@ export async function createApp(
   );
   // CSV imports are sent as JSON; 1,000 staff rows are ~100 KB, so allow up to 6 MB.
   app.useBodyParser('json', { limit: '6mb' });
+  // Local development only: uploads PUT to the API (FILE_UPLOAD_MODE=proxy).
+  app.useBodyParser('raw', {
+    type: (req: { method?: string; url?: string }) =>
+      req.method === 'PUT' && /^\/api\/files\/[^/]+\/content/.test(req.url ?? ''),
+    limit: config.fileMaxBytes,
+  });
   app.enableCors({
     origin: config.webOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],

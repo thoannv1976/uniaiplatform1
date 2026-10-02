@@ -1,6 +1,12 @@
 import OpenAI from 'openai';
 import { estimateTokens, isAbortError, toErrorChunk } from './errors.js';
-import type { ChatChunk, LLMProvider, NormalizedChatRequest, StopReason } from './types.js';
+import {
+  IMAGE_TOKEN_ESTIMATE,
+  type ChatChunk,
+  type LLMProvider,
+  type NormalizedChatRequest,
+  type StopReason,
+} from './types.js';
 
 export interface OpenAIProviderOptions {
   apiKey: string;
@@ -35,7 +41,21 @@ export class OpenAIProvider implements LLMProvider {
       .join('\n\n');
     const input = req.messages
       .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      .map((m) =>
+        m.role === 'user' && m.images?.length
+          ? {
+              role: 'user' as const,
+              content: [
+                ...m.images.map((img) => ({
+                  type: 'input_image' as const,
+                  image_url: `data:${img.mime};base64,${img.data}`,
+                  detail: 'auto' as const,
+                })),
+                { type: 'input_text' as const, text: m.content },
+              ],
+            }
+          : { role: m.role as 'user' | 'assistant', content: m.content },
+      );
 
     let text = '';
     let usage: Extract<ChatChunk, { type: 'usage' }> | null = null;
@@ -114,7 +134,10 @@ export function estimatedUsage(
 ): Extract<ChatChunk, { type: 'usage' }> {
   return {
     type: 'usage',
-    inputTokens: req.messages.reduce((sum, m) => sum + estimateTokens(m.content), 0),
+    inputTokens: req.messages.reduce(
+      (sum, m) => sum + estimateTokens(m.content) + (m.images?.length ?? 0) * IMAGE_TOKEN_ESTIMATE,
+      0,
+    ),
     outputTokens: estimateTokens(output),
     cachedInputTokens: 0,
   };

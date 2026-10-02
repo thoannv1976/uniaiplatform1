@@ -1,0 +1,12 @@
+{
+  "rule": [
+    {
+      "action": { "type": "Delete" },
+      "condition": { "age": 1, "matchesPrefix": ["tmp/"] }
+    },
+    {
+      "action": { "type": "Delete" },
+      "condition": { "age": 180, "matchesPrefix": ["files/"] }
+    }
+  ]
+}

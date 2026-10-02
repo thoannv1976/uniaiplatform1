@@ -303,7 +303,7 @@ export function App() {
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M8</footer>
+          <footer className="text-xs text-slate-400">Bản phát triển – milestone M9</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

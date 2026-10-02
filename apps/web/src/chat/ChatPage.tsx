@@ -1,7 +1,9 @@
 import {
   CHAT_MODEL_AUTO,
   formatUsd,
+  MAX_FILES_PER_MESSAGE,
   MODEL_TIER_LABELS_VI,
+  type AttachmentRef,
   type ChatMessage,
   type ChatModelOption,
   type ChatStreamEvent,
@@ -18,7 +20,9 @@ import {
   fetchMyQuota,
   streamChat,
   updateConversation,
+  uploadFile,
 } from '../lib/api';
+import { AttachmentChips, AttachmentPicker, type PendingFile } from './Attachments';
 import { CopyButton, Markdown } from './Markdown';
 
 export interface ChatApi {
@@ -29,6 +33,7 @@ export interface ChatApi {
   fetchChatModels: typeof fetchChatModels;
   streamChat: typeof streamChat;
   fetchMyQuota: typeof fetchMyQuota;
+  uploadFile: typeof uploadFile;
 }
 
 const defaultApi: ChatApi = {
@@ -39,6 +44,7 @@ const defaultApi: ChatApi = {
   fetchChatModels,
   streamChat,
   fetchMyQuota,
+  uploadFile,
 };
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -47,7 +53,16 @@ export const CONVERSATION_PATH = '/hoi-thoai';
 /** A message as shown: stored messages plus the answer being streamed. */
 type ViewMessage = Pick<
   ChatMessage,
-  'id' | 'role' | 'content' | 'status' | 'modelId' | 'usage' | 'cost' | 'error' | 'latencyMs'
+  | 'id'
+  | 'role'
+  | 'content'
+  | 'status'
+  | 'modelId'
+  | 'usage'
+  | 'cost'
+  | 'error'
+  | 'latencyMs'
+  | 'attachments'
 > & { modelName?: string };
 
 const toView = (m: ChatMessage): ViewMessage => ({
@@ -60,6 +75,7 @@ const toView = (m: ChatMessage): ViewMessage => ({
   cost: m.cost,
   error: m.error,
   latencyMs: m.latencyMs,
+  attachments: m.attachments,
 });
 
 /** Pinned first, then most recently updated; filtered by a case/diacritic-insensitive search. */
@@ -98,6 +114,8 @@ export function ChatPage({
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pending, setPending] = useState<PendingFile[]>([]);
+  const uploading = pending.some((p) => p.status === 'uploading');
   const controller = useRef<AbortController | null>(null);
   /** Set when the stream itself created the conversation: its messages are already shown. */
   const skipLoad = useRef<string | null>(null);
@@ -202,9 +220,36 @@ export function ChatPage({
     }
   }
 
-  async function send(text: string) {
+  function addFiles(files: File[]) {
+    const room = MAX_FILES_PER_MESSAGE - pending.length;
+    if (files.length > room) setError(`Tối đa ${MAX_FILES_PER_MESSAGE} tệp mỗi tin nhắn.`);
+    for (const [i, file] of files.slice(0, Math.max(0, room)).entries()) {
+      const key = `${Date.now()}-${i}-${file.name}`;
+      setPending((list) => [
+        ...list,
+        { key, name: file.name, size: file.size, status: 'uploading' },
+      ]);
+      const update = (patch: Partial<PendingFile>) =>
+        setPending((list) => list.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+      void getToken()
+        .then((t) => api.uploadFile(t, file))
+        .then((f) => update({ status: 'ready', file: f }))
+        .catch((err: unknown) => update({ status: 'error', error: errorMessage(err) }));
+    }
+  }
+
+  async function send(text: string, resend?: AttachmentRef[]) {
     const message = text.trim();
-    if (!message || busy) return;
+    if (!message || busy || (!resend && uploading)) return;
+    const attachments =
+      resend ??
+      pending.flatMap((p) =>
+        p.status === 'ready' && p.file
+          ? [{ id: p.file.id, name: p.file.name, kind: p.file.kind }]
+          : [],
+      );
+    const chosen = pending;
+    if (!resend) setPending([]);
     setError(null);
     setBusy(true);
     setView((v) => {
@@ -223,6 +268,7 @@ export function ChatPage({
             cost: null,
             error: null,
             latencyMs: null,
+            attachments,
           },
           {
             id: `local-answer-${list.length}`,
@@ -234,6 +280,7 @@ export function ChatPage({
             cost: null,
             error: null,
             latencyMs: null,
+            attachments: [],
           },
         ],
       };
@@ -244,7 +291,12 @@ export function ChatPage({
     try {
       await api.streamChat(
         await getToken(),
-        { message, model, ...(conversationId ? { conversationId } : {}) },
+        {
+          message,
+          model,
+          ...(conversationId ? { conversationId } : {}),
+          ...(attachments.length ? { fileIds: attachments.map((a) => a.id) } : {}),
+        },
         (e) => {
           if (e.type === 'meta') started = true;
           onEvent(e);
@@ -265,6 +317,7 @@ export function ChatPage({
         // Nothing was stored (e.g. 403/503 before the stream): take the turn back.
         setView((v) => ({ ...v, messages: v.messages.slice(0, -2) }));
         setInput(message);
+        if (!resend) setPending(chosen);
         setError(errorMessage(err));
       }
     } finally {
@@ -387,7 +440,7 @@ export function ChatPage({
               canRegenerate={
                 !busy && i === messages.length - 1 && m.role === 'assistant' && !!lastUser
               }
-              onRegenerate={() => lastUser && void send(lastUser.content)}
+              onRegenerate={() => lastUser && void send(lastUser.content, lastUser.attachments)}
             />
           ))}
           <div ref={bottom} />
@@ -399,6 +452,12 @@ export function ChatPage({
           </p>
         )}
 
+        <AttachmentPicker
+          pending={pending}
+          disabled={busy}
+          onAdd={addFiles}
+          onRemove={(key) => setPending((list) => list.filter((p) => p.key !== key))}
+        />
         <form
           className="flex gap-2"
           onSubmit={(e) => {
@@ -433,7 +492,8 @@ export function ChatPage({
             <button
               type="submit"
               className="rounded bg-sky-800 px-4 py-1 text-sm text-white disabled:opacity-50"
-              disabled={!input.trim()}
+              disabled={!input.trim() || uploading}
+              title={uploading ? 'Đang xử lý tệp đính kèm…' : undefined}
             >
               Gửi
             </button>
@@ -534,6 +594,7 @@ function MessageView(props: {
   if (m.role === 'user') {
     return (
       <div className="ml-auto max-w-[85%] rounded-lg bg-sky-50 px-3 py-2 text-sm whitespace-pre-wrap">
+        <AttachmentChips files={m.attachments} />
         {m.content}
       </div>
     );

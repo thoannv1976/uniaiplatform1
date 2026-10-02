@@ -2,10 +2,21 @@ import type { ProviderId, ReasoningEffort, Transport } from '@uniai/shared';
 
 export type { ProviderId, ReasoningEffort, Transport };
 
+/** An image attached to a user message (base64, at most ~5 MB). */
+export interface ImageInput {
+  mime: string;
+  data: string;
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  /** Only on user messages, and only for models with the "image" capability. */
+  images?: ImageInput[];
 }
+
+/** Rough input cost of one image, used for estimates (providers bill ~250–1,600 tokens). */
+export const IMAGE_TOKEN_ESTIMATE = 1_600;
 
 /** Provider-neutral request built by the AI Gateway. */
 export interface NormalizedChatRequest {

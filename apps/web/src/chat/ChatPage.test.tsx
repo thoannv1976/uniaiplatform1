@@ -31,6 +31,7 @@ const DETAIL: ConversationDetail = {
       stopReason: null,
       error: null,
       latencyMs: null,
+      attachments: [{ id: 'f0', name: 'chuong-trinh.pdf', kind: 'pdf' }],
       createdAt: '2026-10-01T00:00:00.000Z',
     },
     {
@@ -45,6 +46,7 @@ const DETAIL: ConversationDetail = {
       stopReason: 'end',
       error: null,
       latencyMs: 900,
+      attachments: [],
       createdAt: '2026-10-01T00:00:01.000Z',
     },
   ],
@@ -78,6 +80,23 @@ function setup(
       ]),
     ),
     streamChat: vi.fn(stream),
+    uploadFile: vi.fn((_t: string, file: File) =>
+      file.name.endsWith('.exe')
+        ? Promise.reject(new Error('Loại tệp không được hỗ trợ.'))
+        : Promise.resolve({
+            id: 'f1',
+            name: file.name,
+            mime: file.type,
+            kind: 'pdf' as const,
+            size: file.size,
+            status: 'ready' as const,
+            pages: 3,
+            chars: 900,
+            truncated: false,
+            error: null,
+            createdAt: '2026-10-01T00:00:00.000Z',
+          }),
+    ),
     fetchMyQuota: vi.fn(() =>
       Promise.resolve({
         uid: 'gv',
@@ -193,6 +212,41 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gửi' }));
     await vi.waitFor(() => expect(api.streamChat).toHaveBeenCalled());
     expect(api.fetchConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches files, sends their ids and shows them on the message', async () => {
+    const { api, ui } = setup((_t, req, onEvent) => {
+      expect(req).toEqual({ message: 'Tóm tắt', model: 'auto', fileIds: ['f1'] });
+      onEvent(META);
+      return Promise.resolve();
+    });
+    ui('/');
+    const picker = await screen.findByLabelText('Chọn tệp đính kèm');
+    fireEvent.change(picker, {
+      target: {
+        files: [
+          new File(['%PDF-'], 'quy-che.pdf', { type: 'application/pdf' }),
+          new File(['MZ'], 'virus.exe', { type: 'application/x-msdownload' }),
+        ],
+      },
+    });
+    expect(await screen.findByText(/quy-che\.pdf · 5 B · 3 trang/)).toBeInTheDocument();
+    expect(await screen.findByText(/virus\.exe .*Loại tệp không được hỗ trợ/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Bỏ tệp virus.exe'));
+    fireEvent.change(screen.getByLabelText('Tin nhắn'), { target: { value: 'Tóm tắt' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi' }));
+    await vi.waitFor(() => expect(api.streamChat).toHaveBeenCalled());
+    const chips = await screen.findByRole('list', { name: 'Tệp đính kèm' });
+    expect(chips).toHaveTextContent('quy-che.pdf');
+    expect(screen.queryByText(/quy-che\.pdf · 5 B/)).not.toBeInTheDocument();
+  });
+
+  it('shows the files of stored messages', async () => {
+    const { ui } = setup(() => Promise.resolve());
+    ui('/hoi-thoai/c9');
+    expect(await screen.findByRole('list', { name: 'Tệp đính kèm' })).toHaveTextContent(
+      'chuong-trinh.pdf',
+    );
   });
 
   it('renames, pins, searches and deletes conversations', async () => {

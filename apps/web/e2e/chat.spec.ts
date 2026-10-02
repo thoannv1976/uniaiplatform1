@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_USER } from './e2e-user';
 
-// Plan M6: sign in (emulator) → chat → streamed answer → cost shown; M8: my usage.
+// Plan M6: sign in (emulator) → chat → streamed answer → cost shown; M8: my usage; M9: attachment.
 test.skip(!process.env.FIRESTORE_EMULATOR_HOST, 'cần Firebase Emulator (pnpm test:e2e)');
 
 test('đăng nhập, chat với AUTO, nhận câu trả lời dạng stream và thấy chi phí', async ({ page }) => {
@@ -27,6 +27,18 @@ test('đăng nhập, chat với AUTO, nhận câu trả lời dạng stream và 
   // Reloading shows the stored conversation.
   await page.reload();
   await expect(page.getByText('[mock:mock-economy] Xin chào từ kiểm thử e2e')).toBeVisible();
+
+  // M9: attach a document; its text reaches the model (the mock echoes it back).
+  await page.getByLabel('Chọn tệp đính kèm').setInputFiles({
+    name: 'ghi-chu.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Lịch thi học kỳ: 15/12'),
+  });
+  await expect(page.getByText(/ghi-chu\.txt · \d+ B$/)).toBeVisible();
+  await box.fill('Tệp nói gì?');
+  await box.press('Enter');
+  await expect(page.getByRole('list', { name: 'Tệp đính kèm' })).toContainText('ghi-chu.txt');
+  await expect(page.getByText(/Lịch thi học kỳ: 15\/12/).last()).toBeVisible();
 
   // M8: personal usage comes straight from the ledger.
   await page.getByRole('link', { name: 'Mức sử dụng' }).click();

@@ -5,17 +5,24 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { LLMProvider, ChatMessage as ProviderMessage } from '@uniai/ai-providers';
+import {
+  IMAGE_TOKEN_ESTIMATE,
+  type ChatMessage as ProviderMessage,
+  type ImageInput,
+  type LLMProvider,
+} from '@uniai/ai-providers';
 import {
   QuotaError,
   type AlertService,
   type ConversationStore,
+  type HistoryMessage,
   type QuotaService,
   type Reservation,
 } from '@uniai/firestore';
 import {
   CHAT_MODEL_AUTO,
   DEFAULT_SYSTEM_PROMPT,
+  FILE_KIND_LABELS_VI,
   formatSseEvent,
   isPremiumTier,
   tokenCost,
@@ -30,6 +37,7 @@ import {
 import type { Response } from 'express';
 import { ProviderRuntime, ProviderUnavailableError } from '../ai/provider-runtime.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
+import { FilesService, type LoadedAttachment } from '../files/files.service.js';
 import { ALERTS } from '../usage/tokens.js';
 import { ModelRouter, type Route } from './model-router.js';
 
@@ -55,14 +63,18 @@ const USER_ERRORS: Record<string, string> = {
   invalid_request: 'Yêu cầu không hợp lệ với model này (có thể quá dài).',
 };
 
+type Turn = { role: 'user' | 'assistant'; content: string; images?: ImageInput[] };
+
 /** Builds the provider conversation: system prompt, recent history within budget, new message. */
 export function buildMessages(
-  history: { role: 'user' | 'assistant'; content: string }[],
-  message: string,
+  history: Turn[],
+  message: string | Omit<Turn, 'role'>,
   budgetChars: number,
 ): ProviderMessage[] {
-  const kept: { role: 'user' | 'assistant'; content: string }[] = [];
-  let used = message.length;
+  const next: Turn =
+    typeof message === 'string' ? { role: 'user', content: message } : { role: 'user', ...message };
+  const kept: Turn[] = [];
+  let used = next.content.length;
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i]!;
     if (used + m.content.length > budgetChars) break;
@@ -71,18 +83,72 @@ export function buildMessages(
   }
   // Providers expect the conversation to start with the user and to alternate roles.
   while (kept[0]?.role === 'assistant') kept.shift();
-  const merged: { role: 'user' | 'assistant'; content: string }[] = [];
-  for (const m of [...kept, { role: 'user' as const, content: message }]) {
+  const merged: Turn[] = [];
+  for (const m of [...kept, next]) {
     const last = merged.at(-1);
-    if (last?.role === m.role) last.content += `\n\n${m.content}`;
-    else merged.push({ ...m });
+    if (last?.role === m.role) {
+      last.content += `\n\n${m.content}`;
+      if (m.images?.length) last.images = [...(last.images ?? []), ...m.images];
+    } else merged.push({ ...m });
   }
-  return [{ role: 'system', content: DEFAULT_SYSTEM_PROMPT }, ...merged];
+  return [
+    { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+    ...merged.map((m) => (m.images?.length ? m : { role: m.role, content: m.content })),
+  ];
+}
+
+/**
+ * A user message with its attachments: each document's text in a <tệp> block (cut to fit
+ * `capChars` in total), images passed separately when the model reads images.
+ */
+export function withAttachments(
+  text: string,
+  files: LoadedAttachment[],
+  capChars: number,
+  vision: boolean,
+): Omit<Turn, 'role'> {
+  if (files.length === 0) return { content: text };
+  const docs = files.filter((f) => f.text !== null);
+  // Share the room fairly: short documents keep everything, long ones split the rest.
+  const share = new Map<string, number>();
+  let room = Math.max(0, capChars);
+  const bySize = [...docs].sort((a, b) => a.text!.length - b.text!.length);
+  bySize.forEach((f, i) => {
+    const fair = Math.floor(room / (bySize.length - i));
+    const take = Math.min(f.text!.length, fair);
+    share.set(f.ref.id, take);
+    room -= take;
+  });
+  const blocks: string[] = [];
+  const images: ImageInput[] = [];
+  for (const f of files) {
+    const label = `${f.ref.name} (${FILE_KIND_LABELS_VI[f.ref.kind]})`;
+    if (!f.available) {
+      blocks.push(`[Tệp ${label} không còn được lưu trữ.]`);
+    } else if (f.image) {
+      if (vision) images.push(f.image);
+      else blocks.push(`[Ảnh ${f.ref.name}: model này không đọc được ảnh.]`);
+    } else {
+      const keep = share.get(f.ref.id) ?? 0;
+      const cut = keep < f.text!.length || f.truncated;
+      blocks.push(
+        `<tệp tên="${f.ref.name.replace(/"/g, "'")}">\n${f.text!.slice(0, keep)}${cut ? '\n[… phần còn lại của tệp đã được cắt bớt do giới hạn độ dài]' : ''}\n</tệp>`,
+      );
+    }
+  }
+  return {
+    content: `${blocks.join('\n\n')}\n\n${text}`,
+    ...(images.length ? { images } : {}),
+  };
 }
 
 /** Conservative input estimate: about 3 characters per token, plus per-message overhead. */
 export function estimateInputTokens(messages: ProviderMessage[]): number {
-  return messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 3) + 8, 0);
+  return messages.reduce(
+    (sum, m) =>
+      sum + Math.ceil(m.content.length / 3) + 8 + (m.images?.length ?? 0) * IMAGE_TOKEN_ESTIMATE,
+    0,
+  );
 }
 
 /**
@@ -120,6 +186,7 @@ export class ChatService {
     @Inject(QUOTA_SERVICE) private readonly quota: QuotaService,
     @Inject(ALERTS) private readonly alerts: AlertService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly files: FilesService,
   ) {}
 
   private async resolve(route: Route): Promise<LLMProvider> {
@@ -139,9 +206,15 @@ export class ChatService {
    * Picks the route and reserves its worst-case cost. A model choice that would exceed the
    * premium budget falls back to AUTO (cheaper models), as spec 8.6 asks.
    */
-  private async reserve(user: UserProfile, req: ChatRequest, messages: ProviderMessage[]) {
-    const route = await this.router.choose(req.model, user.role);
+  private async reserve(
+    user: UserProfile,
+    req: ChatRequest,
+    build: (route: Route) => ProviderMessage[],
+    requireImage: boolean,
+  ) {
+    const route = await this.router.choose(req.model, user.role, { requireImage });
     const plan = async (r: Route) => {
+      const messages = build(r);
       const premium = isPremiumTier(r.model.tier);
       const summary = await this.quota.summary(user.uid);
       const room = summary
@@ -168,7 +241,7 @@ export class ChatService {
         conversationId: req.conversationId ?? null,
         routeReason: r.reason,
       });
-      return { route: r, reservation, maxOutputTokens: cost.maxOutputTokens };
+      return { route: r, reservation, maxOutputTokens: cost.maxOutputTokens, messages };
     };
     try {
       return await plan(route);
@@ -180,7 +253,7 @@ export class ChatService {
         throw err;
       }
       const auto = await this.router
-        .choose(CHAT_MODEL_AUTO, user.role, { excludePremium: true })
+        .choose(CHAT_MODEL_AUTO, user.role, { excludePremium: true, requireImage })
         .catch(() => {
           throw err; // no cheaper model: keep the premium-quota message
         });
@@ -191,6 +264,14 @@ export class ChatService {
     }
   }
 
+  /** Contents of the files attached to earlier messages, looked up per message. */
+  private async loadHistoryFiles(uid: string, history: HistoryMessage[]) {
+    const refs = history.flatMap((m) => m.attachments);
+    const loaded = refs.length ? await this.files.forHistory(uid, refs) : [];
+    const byId = new Map(loaded.map((f) => [f.ref.id, f]));
+    return (m: HistoryMessage) => m.attachments.flatMap((a) => byId.get(a.id) ?? []);
+  }
+
   /** Validation and quota errors are thrown before any byte is sent (JSON error responses). */
   async chat(user: UserProfile, req: ChatRequest, res: Response): Promise<void> {
     const requestTime = new Date();
@@ -198,13 +279,24 @@ export class ChatService {
       ? await this.conversations.history(req.conversationId, user.uid)
       : [];
     if (!history) throw new NotFoundException('Không tìm thấy hội thoại.');
-    // The route's context window only trims history; reserve with a generous budget first.
-    const draft = buildMessages(history, req.message, HISTORY_MAX_CHARS);
-    const { route, reservation, maxOutputTokens } = await this.reserve(user, req, draft);
-    const messages = buildMessages(
-      history,
-      req.message,
-      Math.min(route.model.contextWindow * HISTORY_CHARS_PER_TOKEN, HISTORY_MAX_CHARS),
+    const attached = req.fileIds?.length ? await this.files.forMessage(user.uid, req.fileIds) : [];
+    const earlier = await this.loadHistoryFiles(user.uid, history);
+    // Files make prompts long: the route's context window decides how much of them fits.
+    const build = (r: Route) => {
+      const budget = Math.min(r.model.contextWindow * HISTORY_CHARS_PER_TOKEN, HISTORY_MAX_CHARS);
+      const vision = r.model.capabilities.includes('image');
+      const turns = history.map((m) => ({
+        role: m.role,
+        ...withAttachments(m.content, earlier(m), Math.floor(budget / 4), vision),
+      }));
+      const next = withAttachments(req.message, attached, budget - req.message.length, vision);
+      return buildMessages(turns, next, budget);
+    };
+    const { route, reservation, maxOutputTokens, messages } = await this.reserve(
+      user,
+      req,
+      build,
+      attached.some((f) => f.image !== null),
     );
 
     let provider: LLMProvider;
@@ -215,6 +307,7 @@ export class ChatService {
         ownerUid: user.uid,
         conversationId: req.conversationId ?? null,
         userText: req.message,
+        attachments: attached.map((f) => f.ref),
         modelId: route.model.id,
         providerId: route.model.providerId,
         retentionDays: this.config.conversationRetentionDays,

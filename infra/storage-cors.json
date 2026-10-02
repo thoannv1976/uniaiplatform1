@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://uniaiplatform1.web.app",
+      "https://uniaiplatform1.firebaseapp.com",
+      "https://uniaiplatform1-staging.web.app",
+      "https://uniaiplatform1-staging.firebaseapp.com"
+    ],
+    "method": ["PUT"],
+    "responseHeader": ["Content-Type", "x-goog-content-length-range"],
+    "maxAgeSeconds": 3600
+  }
+]
