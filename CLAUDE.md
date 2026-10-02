@@ -57,6 +57,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 - Chat có fallback 1 lần (chỉ trước khi stream chữ), circuit breaker và kill switch `settings/killSwitch` (listener,
   < 5 giây) – ADR 0009. AI cần người dùng đã đồng ý `TERMS_VERSION` (`packages/shared/src/terms.ts`); đổi nội dung
   điều khoản thì tăng phiên bản.
+- AUTO đi qua Smart Router (`classifyRequest`, luật trong `settings/router`, ADR 0010); lý do định tuyến luôn
+  ghi sổ cái. Không gọi AI để phân loại.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
   sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

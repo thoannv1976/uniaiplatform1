@@ -1,4 +1,9 @@
 import {
+  routerTestResponseSchema,
+  routerViewSchema,
+  type RouterConfig,
+  type RouterTestResponse,
+  type RouterView,
   killSwitchSchema,
   type KillSwitch,
   type UpdateKillSwitchRequest,
@@ -520,5 +525,26 @@ export async function updateKillSwitch(
 ): Promise<KillSwitch> {
   return killSwitchSchema.parse(
     await call('/api/admin/kill-switch', idToken, { method: 'PUT', body: JSON.stringify(value) }),
+  );
+}
+
+// ---- M11: Smart Router ----
+
+export async function fetchRouter(idToken: string): Promise<RouterView> {
+  return routerViewSchema.parse(await call('/api/admin/router', idToken));
+}
+
+export async function saveRouter(idToken: string, config: RouterConfig): Promise<RouterView> {
+  return routerViewSchema.parse(
+    await call('/api/admin/router', idToken, { method: 'PUT', body: JSON.stringify(config) }),
+  );
+}
+
+export async function testRouter(
+  idToken: string,
+  input: { text: string; documentCount: number; imageCount: number },
+): Promise<RouterTestResponse> {
+  return routerTestResponseSchema.parse(
+    await call('/api/admin/router/test', idToken, { method: 'POST', body: JSON.stringify(input) }),
   );
 }

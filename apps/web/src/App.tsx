@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-rou
 import { ChatTestPage } from './admin/ChatTestPage';
 import { DepartmentsPage } from './admin/DepartmentsPage';
 import { KillSwitchPage } from './admin/KillSwitchPage';
+import { RouterPage } from './admin/RouterPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
 import { ProvidersPage } from './admin/ProvidersPage';
@@ -37,6 +38,7 @@ export const ADMIN_PATHS = {
   quotas: '/quan-tri/dinh-muc',
   dashboard: '/quan-tri/thong-ke',
   killSwitch: '/quan-tri/kill-switch',
+  router: '/quan-tri/dinh-tuyen',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
 
@@ -156,6 +158,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         {QUOTA_VIEWERS.includes(role) && (
           <NavLink to={ADMIN_PATHS.quotas} className={tabClass}>
             Định mức
+          </NavLink>
+        )}
+        {REGISTRY_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.router} className={tabClass}>
+            Định tuyến
           </NavLink>
         )}
         {REGISTRY_VIEWERS.includes(role) && (
@@ -279,6 +286,14 @@ function AdminPages() {
                 getToken={getToken}
               />
             )}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="dinh-tuyen"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => <RouterPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />}
           </AdminRoute>
         }
       />

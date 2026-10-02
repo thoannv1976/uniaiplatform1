@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { ROLES, TERMS_VERSION, type Role } from '@uniai/shared';
+import { DEFAULT_ROUTER_CONFIG, ROLES, TERMS_VERSION, type Role } from '@uniai/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -403,6 +403,21 @@ describe('role matrix', () => {
       call: () => http().post('/api/me/terms').send({ version: TERMS_VERSION }),
       allowed: [...ROLES],
       ok: 204,
+    },
+    {
+      name: 'GET /api/admin/router',
+      call: () => http().get('/api/admin/router'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'PUT /api/admin/router',
+      call: () => http().put('/api/admin/router').send(DEFAULT_ROUTER_CONFIG),
+      allowed: ['super_admin', 'ai_admin'],
+    },
+    {
+      name: 'POST /api/admin/router/test',
+      call: () => http().post('/api/admin/router/test').send({ text: 'Xin chào' }),
+      allowed: ['super_admin', 'ai_admin'],
     },
     {
       name: 'POST /api/admin/models/:id/test',

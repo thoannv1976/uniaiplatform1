@@ -30,6 +30,7 @@ import {
   type ChatRequest,
   type ChatStreamEvent,
   type ChatUsage,
+  type RouteInput,
   type MessageStatus,
   type Price,
   type UserProfile,
@@ -40,6 +41,7 @@ import { APP_CONFIG, type AppConfig } from '../config.js';
 import { AuditService } from '../audit/audit.service.js';
 import { FilesService, type LoadedAttachment } from '../files/files.service.js';
 import { CircuitBreaker } from '../resilience/circuit-breaker.js';
+import { RouterService } from '../router/router.service.js';
 import { ALERTS } from '../usage/tokens.js';
 import { ModelRouter, type Route } from './model-router.js';
 
@@ -192,6 +194,7 @@ export class ChatService {
     private readonly files: FilesService,
     private readonly circuit: CircuitBreaker,
     private readonly audit: AuditService,
+    private readonly smartRouter: RouterService,
   ) {}
 
   private async resolve(route: Route): Promise<LLMProvider> {
@@ -255,27 +258,33 @@ export class ChatService {
     user: UserProfile,
     req: ChatRequest,
     build: (route: Route) => ProviderMessage[],
-    requireImage: boolean,
+    routeInput: RouteInput,
   ): Promise<Planned> {
-    const route = await this.router.choose(req.model, user.role, { requireImage });
+    const requireImage = routeInput.imageCount > 0;
+    const decision =
+      req.model === CHAT_MODEL_AUTO ? await this.smartRouter.decide(routeInput) : undefined;
+    const route = await this.router.choose(req.model, user.role, { requireImage, decision });
     const conversationId = req.conversationId ?? null;
     try {
       return await this.plan(user, route, build, conversationId);
     } catch (err) {
-      if (
-        !(err instanceof QuotaError && err.code === 'premium_exceeded') ||
-        req.model === CHAT_MODEL_AUTO
-      ) {
-        throw err;
-      }
+      if (!(err instanceof QuotaError && err.code === 'premium_exceeded')) throw err;
+      // Out of premium (Advanced/Premium) budget: drop to the cheaper tiers (spec 8.6).
       const auto = await this.router
-        .choose(CHAT_MODEL_AUTO, user.role, { excludePremium: true, requireImage })
+        .choose(CHAT_MODEL_AUTO, user.role, {
+          excludePremium: true,
+          requireImage,
+          decision: decision ?? (await this.smartRouter.decide(routeInput)),
+        })
         .catch(() => {
           throw err; // no cheaper model: keep the premium-quota message
         });
       return this.plan(
         user,
-        { ...auto, reason: `Hết hạn mức model cao cấp – chuyển sang ${auto.model.displayName}` },
+        {
+          ...auto,
+          reason: `Hết hạn mức model Nâng cao/Cao cấp – hạ xuống ${auto.model.displayName}`,
+        },
         build,
         conversationId,
       );
@@ -311,7 +320,12 @@ export class ChatService {
       return buildMessages(turns, next, budget);
     };
     const requireImage = attached.some((f) => f.image !== null);
-    const first = await this.reserve(user, req, build, requireImage);
+    const first = await this.reserve(user, req, build, {
+      text: req.message,
+      documentCount: attached.filter((f) => f.image === null).length,
+      imageCount: attached.filter((f) => f.image !== null).length,
+      attachedChars: attached.reduce((n, f) => n + (f.text?.length ?? 0), 0),
+    });
 
     let provider: LLMProvider;
     let turn;

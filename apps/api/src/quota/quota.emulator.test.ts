@@ -111,7 +111,7 @@ describe('quota on the chat path', () => {
     expect(meta).toMatchObject({
       type: 'meta',
       model: { id: 'mock-economy' },
-      routeReason: expect.stringMatching(/Hết hạn mức model cao cấp/),
+      routeReason: expect.stringMatching(/Hết hạn mức model Nâng cao\/Cao cấp/),
     });
   });
 
