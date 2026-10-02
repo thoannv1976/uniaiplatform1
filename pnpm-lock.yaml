@@ -184,9 +184,15 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.1.2
         version: 12.1.2(@nestjs/common@12.1.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.2)
+      '@uniai/firestore':
+        specifier: workspace:*
+        version: link:../../packages/firestore
       '@uniai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      firebase-admin:
+        specifier: ^14.5.0
+        version: 14.5.0(@firebase/app-compat@0.5.18)(@firebase/app@0.16.2)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2

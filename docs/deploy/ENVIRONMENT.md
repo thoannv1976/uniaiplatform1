@@ -2,7 +2,8 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M5 (Claude Code): index `conversations`, `usageTransactions` và TTL `expireAt`
+Cập nhật lần cuối: 02/10/2026 – M7 (Claude Code): Cloud Scheduler `uniai-quota-rollover-*` (00:05 ngày 1),
+`uniai-reservation-sweeper-*` (5 phút) qua `infra/scheduler.sh`; collection định mức/ngân sách. Trước đó – M5 (Claude Code): index `conversations`, `usageTransactions` và TTL `expireAt`
 (khai trong `firestore.indexes.json`, deploy tự áp dụng). Trước đó – M4 (Claude Code): thêm 3 secret API key riêng cho staging (cần chạy lại bootstrap),
 biến `VERTEX_LOCATION`, `ENABLE_MOCK_PROVIDER`; collection `providers`, `models`. Trước đó (01/10): bootstrap đã chạy
 (Cowork, Issue #2), deploy staging xanh sau khi đổi `/healthz` → `/health`.
@@ -44,6 +45,7 @@ Super Admin: staging = _chưa cấp_; production = _chưa cấp_.
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `uniai-api`       | datastore.user, aiplatform.user, logging.logWriter, firebaseauth.admin; secretAccessor + secretVersionAdder **chỉ trên 6 secret API key**                                                              |
 | `uniai-worker`    | datastore.user, aiplatform.user, logging.logWriter                                                                                                                                                     |
+| `uniai-scheduler` | run.invoker **chỉ trên** `uniai-worker`, `uniai-worker-staging` (tạo bởi `infra/scheduler.sh`, M7)                                                                                                     |
 | `github-deployer` | run.admin, artifactregistry.writer, firebasehosting.admin, firebaserules.admin, datastore.indexAdmin, serviceUsageConsumer, apiKeysViewer; serviceAccountUser **chỉ trên** `uniai-api`, `uniai-worker` |
 
 ### Biến môi trường Cloud Run (do `deploy.yml` đặt)

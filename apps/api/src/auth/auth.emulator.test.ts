@@ -258,6 +258,57 @@ describe('role matrix', () => {
       ok: 201,
     },
     {
+      name: 'GET /api/me/quota',
+      call: () => http().get('/api/me/quota'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'GET /api/admin/quotas',
+      call: () => http().get('/api/admin/quotas'),
+      allowed: ['super_admin', 'unit_admin', 'auditor'],
+    },
+    {
+      name: 'POST /api/admin/quota-adjustments',
+      call: () =>
+        http().post('/api/admin/quota-adjustments').send({
+          uid: 'target',
+          type: 'decrease',
+          amount: 1,
+          reason: 'Ma trận vai trò',
+          approvedBy: 'Kiểm thử',
+        }),
+      allowed: ['super_admin', 'unit_admin'],
+      ok: 201,
+    },
+    {
+      name: 'GET /api/admin/quota-adjustments',
+      call: () => http().get('/api/admin/quota-adjustments'),
+      allowed: ['super_admin', 'unit_admin', 'auditor'],
+    },
+    {
+      name: 'GET /api/admin/quota-tiers',
+      call: () => http().get('/api/admin/quota-tiers'),
+      allowed: ['super_admin', 'unit_admin', 'auditor', 'ai_admin'],
+    },
+    {
+      name: 'PATCH /api/admin/quota-tiers/:id',
+      call: () => http().patch('/api/admin/quota-tiers/power').send({ requestsPerMinute: 20 }),
+      allowed: ['super_admin'],
+    },
+    {
+      name: 'GET /api/admin/budgets',
+      call: () => http().get('/api/admin/budgets'),
+      allowed: ['super_admin', 'unit_admin', 'auditor'],
+    },
+    {
+      name: 'PUT /api/admin/budgets/:departmentId',
+      call: () =>
+        http()
+          .put('/api/admin/budgets/QLDT')
+          .send({ budget: 900_000_000, reason: 'Ma trận vai trò' }),
+      allowed: ['super_admin', 'unit_admin'],
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],
@@ -266,9 +317,16 @@ describe('role matrix', () => {
 
   for (const c of cases) {
     it(`${c.name}: allowed ${c.allowed.join(', ')}`, async () => {
-      await givenUser(app, 'target', 'user');
+      await givenUser(app, 'target', 'user', 'active', { departmentId: 'QLDT' });
       for (const role of ROLES) {
-        await givenUser(app, `r-${role}`, role);
+        // Unit admins manage the whole tree here, so scope checks never mask the role check.
+        await givenUser(
+          app,
+          `r-${role}`,
+          role,
+          'active',
+          role === 'unit_admin' ? { departmentId: 'FTU', scopeDepartmentId: 'FTU' } : {},
+        );
         const res = await c.call().set('Authorization', tokenFor(`r-${role}`));
         const expected = c.allowed.includes(role) ? (c.ok ?? 200) : 403;
         expect(res.status, `${role} → ${c.name}`).toBe(expected);

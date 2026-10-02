@@ -155,6 +155,22 @@ export class ConversationStore {
     return snap.docs.map(toMessage).reverse();
   }
 
+  /** Earlier turns the model should see (null when the conversation is not the caller's). */
+  async history(
+    id: string,
+    ownerUid: string,
+    limit = 50,
+  ): Promise<{ role: 'user' | 'assistant'; content: string }[] | null> {
+    const snap = await this.col().doc(id).get();
+    if (!snap.exists || snap.get('ownerUid') !== ownerUid) return null;
+    const earlier = await this.messages(id).orderBy('seq', 'desc').limit(limit).get();
+    return earlier.docs
+      .map(toMessage)
+      .reverse()
+      .filter((m) => m.content && (m.role === 'user' || m.status !== 'error'))
+      .map((m) => ({ role: m.role, content: m.content }));
+  }
+
   /**
    * Writes the user message and an empty assistant message ("streaming") in one
    * transaction, creating the conversation when needed. Returns the earlier history

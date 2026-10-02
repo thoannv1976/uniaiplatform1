@@ -6,6 +6,7 @@ import { DepartmentsPage } from './admin/DepartmentsPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
 import { ProvidersPage } from './admin/ProvidersPage';
+import { QuotaPage } from './admin/QuotaPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AccountPanel } from './components/AccountPanel';
 import { ApiStatus } from './components/ApiStatus';
@@ -19,6 +20,7 @@ const PEOPLE_ADMINS: Role[] = ['super_admin', 'auditor', 'unit_admin'];
 const DEPARTMENT_VIEWERS: Role[] = ['super_admin', 'auditor', 'unit_admin', 'ai_admin'];
 const REGISTRY_VIEWERS: Role[] = ['super_admin', 'ai_admin', 'auditor'];
 const REGISTRY_EDITORS: Role[] = ['super_admin', 'ai_admin'];
+const QUOTA_VIEWERS: Role[] = ['super_admin', 'unit_admin', 'auditor'];
 
 export const ADMIN_PATHS = {
   directory: '/quan-tri/can-bo',
@@ -27,6 +29,7 @@ export const ADMIN_PATHS = {
   models: '/quan-tri/mo-hinh',
   providers: '/quan-tri/nha-cung-cap',
   chatTest: '/quan-tri/thu-chat',
+  quotas: '/quan-tri/dinh-muc',
 } as const;
 
 /** First admin page a role may open. */
@@ -129,6 +132,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
             </NavLink>
           </>
         )}
+        {QUOTA_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.quotas} className={tabClass}>
+            Định mức
+          </NavLink>
+        )}
         {REGISTRY_EDITORS.includes(role) && (
           <NavLink to={ADMIN_PATHS.chatTest} className={tabClass}>
             Thử chat
@@ -218,6 +226,20 @@ function AdminPages() {
           </AdminRoute>
         }
       />
+      <Route
+        path="dinh-muc"
+        element={
+          <AdminRoute roles={QUOTA_VIEWERS}>
+            {(role) => (
+              <QuotaPage
+                canEdit={role === 'super_admin' || role === 'unit_admin'}
+                canEditTiers={role === 'super_admin'}
+                getToken={getToken}
+              />
+            )}
+          </AdminRoute>
+        }
+      />
       <Route path="nguoi-dung" element={<Navigate to={ADMIN_PATHS.accounts} replace />} />
       <Route path="*" element={<Navigate to={me ? adminHome(me.role) : '/'} replace />} />
     </Routes>
@@ -244,7 +266,7 @@ export function App() {
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M6</footer>
+          <footer className="text-xs text-slate-400">Bản phát triển – milestone M7</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

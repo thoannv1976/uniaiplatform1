@@ -6,26 +6,33 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { LLMProvider, ChatMessage as ProviderMessage } from '@uniai/ai-providers';
-import type { ConversationStore, DepartmentStore, UsageStore } from '@uniai/firestore';
 import {
+  QuotaError,
+  type ConversationStore,
+  type QuotaService,
+  type Reservation,
+} from '@uniai/firestore';
+import {
+  CHAT_MODEL_AUTO,
   DEFAULT_SYSTEM_PROMPT,
   formatSseEvent,
+  isPremiumTier,
   tokenCost,
   usageCost,
   type ChatRequest,
   type ChatStreamEvent,
   type ChatUsage,
   type MessageStatus,
+  type Price,
   type UserProfile,
 } from '@uniai/shared';
 import type { Response } from 'express';
 import { ProviderRuntime, ProviderUnavailableError } from '../ai/provider-runtime.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
-import { DEPARTMENT_STORE } from '../departments/departments.controller.js';
-import { ModelRouter } from './model-router.js';
+import { ModelRouter, type Route } from './model-router.js';
 
 export const CONVERSATION_STORE = Symbol('CONVERSATION_STORE');
-export const USAGE_STORE = Symbol('USAGE_STORE');
+export const QUOTA_SERVICE = Symbol('QUOTA_SERVICE');
 
 /** Upper bound for one answer; the model's own limit applies when lower. */
 const MAX_OUTPUT_TOKENS = 16_000;
@@ -34,6 +41,8 @@ const HISTORY_CHARS_PER_TOKEN = 2;
 const HISTORY_MAX_CHARS = 400_000;
 /** Keeps proxies from closing a quiet stream (e.g. while a model is thinking). */
 const HEARTBEAT_MS = 15_000;
+/** Answers are not shortened below this to fit a small remaining quota. */
+const MIN_OUTPUT_TOKENS = 1024;
 
 const USER_ERRORS: Record<string, string> = {
   rate_limited: 'Nhà cung cấp AI đang quá tải hoặc hết hạn mức. Vui lòng thử lại sau ít phút.',
@@ -69,10 +78,34 @@ export function buildMessages(
   return [{ role: 'system', content: DEFAULT_SYSTEM_PROMPT }, ...merged];
 }
 
+/** Conservative input estimate: about 3 characters per token, plus per-message overhead. */
+export function estimateInputTokens(messages: ProviderMessage[]): number {
+  return messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 3) + 8, 0);
+}
+
 /**
- * The AI Gateway's chat path (spec 5.2): route → resolve provider → store the turn →
- * stream SSE → settle the cost in the ledger, also when the user cancels.
- * Quota reservation (M7) and fallback (M10) plug in around `stream`; DLP comes in phase 2.
+ * Worst-case cost (spec 8.7: input estimate + max output) and the output cap, lowered when
+ * that lets the request fit what is left of the user's quota.
+ */
+export function planCost(
+  inputTokens: number,
+  maxOutputTokens: number,
+  price: Pick<Price, 'inputPerMTok' | 'outputPerMTok'>,
+  room: number | null,
+): { estimate: number; maxOutputTokens: number } {
+  const inputCost = tokenCost(inputTokens, price.inputPerMTok);
+  let out = maxOutputTokens;
+  if (room !== null && price.outputPerMTok > 0) {
+    const fit = Math.floor(((room - inputCost) * 1_000_000) / price.outputPerMTok);
+    out = Math.max(MIN_OUTPUT_TOKENS, Math.min(out, fit));
+  }
+  return { estimate: inputCost + tokenCost(out, price.outputPerMTok), maxOutputTokens: out };
+}
+
+/**
+ * The AI Gateway's chat path (spec 5.2): route → resolve provider → reserve quota → store
+ * the turn → stream SSE → settle the real cost (also when the user cancels).
+ * Fallback (M10) plugs in around `stream`; DLP comes in phase 2.
  */
 @Injectable()
 export class ChatService {
@@ -82,18 +115,13 @@ export class ChatService {
     private readonly router: ModelRouter,
     private readonly runtime: ProviderRuntime,
     @Inject(CONVERSATION_STORE) private readonly conversations: ConversationStore,
-    @Inject(USAGE_STORE) private readonly usage: UsageStore,
-    @Inject(DEPARTMENT_STORE) private readonly departments: DepartmentStore,
+    @Inject(QUOTA_SERVICE) private readonly quota: QuotaService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  /** Validation errors are thrown before any byte is sent (normal JSON error responses). */
-  async chat(user: UserProfile, req: ChatRequest, res: Response): Promise<void> {
-    const requestTime = new Date();
-    const route = await this.router.choose(req.model, user.role);
-    let provider: LLMProvider;
+  private async resolve(route: Route): Promise<LLMProvider> {
     try {
-      provider = await this.runtime.resolve(route.provider);
+      return await this.runtime.resolve(route.provider);
     } catch (err) {
       if (err instanceof ProviderUnavailableError) {
         throw new ServiceUnavailableException(
@@ -102,17 +130,121 @@ export class ChatService {
       }
       throw err;
     }
-    const price = route.model.currentPrice!;
-    const turn = await this.conversations.startTurn({
-      ownerUid: user.uid,
-      conversationId: req.conversationId ?? null,
-      userText: req.message,
-      modelId: route.model.id,
-      providerId: route.model.providerId,
-      retentionDays: this.config.conversationRetentionDays,
-    });
-    if (!turn) throw new NotFoundException('Không tìm thấy hội thoại.');
+  }
 
+  /**
+   * Picks the route and reserves its worst-case cost. A model choice that would exceed the
+   * premium budget falls back to AUTO (cheaper models), as spec 8.6 asks.
+   */
+  private async reserve(user: UserProfile, req: ChatRequest, messages: ProviderMessage[]) {
+    const route = await this.router.choose(req.model, user.role);
+    const plan = async (r: Route) => {
+      const premium = isPremiumTier(r.model.tier);
+      const summary = await this.quota.summary(user.uid);
+      const room = summary
+        ? premium
+          ? Math.min(summary.remaining, summary.premiumRemaining)
+          : summary.remaining
+        : null;
+      const cost = planCost(
+        estimateInputTokens(messages),
+        Math.min(r.model.maxOutputTokens, MAX_OUTPUT_TOKENS),
+        r.model.currentPrice!,
+        room,
+      );
+      const reservation = await this.quota.reserve({
+        uid: user.uid,
+        estimate: cost.estimate,
+        premium,
+        providerId: r.model.providerId,
+        transport: r.provider.transport,
+        modelId: r.model.id,
+        apiModelId: r.model.apiModelId,
+        priceId: r.model.currentPrice!.id,
+        conversationId: req.conversationId ?? null,
+        routeReason: r.reason,
+      });
+      return { route: r, reservation, maxOutputTokens: cost.maxOutputTokens };
+    };
+    try {
+      return await plan(route);
+    } catch (err) {
+      if (
+        !(err instanceof QuotaError && err.code === 'premium_exceeded') ||
+        req.model === CHAT_MODEL_AUTO
+      ) {
+        throw err;
+      }
+      const auto = await this.router
+        .choose(CHAT_MODEL_AUTO, user.role, { excludePremium: true })
+        .catch(() => {
+          throw err; // no cheaper model: keep the premium-quota message
+        });
+      return plan({
+        ...auto,
+        reason: `Hết hạn mức model cao cấp – chuyển sang ${auto.model.displayName}`,
+      });
+    }
+  }
+
+  /** Validation and quota errors are thrown before any byte is sent (JSON error responses). */
+  async chat(user: UserProfile, req: ChatRequest, res: Response): Promise<void> {
+    const requestTime = new Date();
+    const history = req.conversationId
+      ? await this.conversations.history(req.conversationId, user.uid)
+      : [];
+    if (!history) throw new NotFoundException('Không tìm thấy hội thoại.');
+    // The route's context window only trims history; reserve with a generous budget first.
+    const draft = buildMessages(history, req.message, HISTORY_MAX_CHARS);
+    const { route, reservation, maxOutputTokens } = await this.reserve(user, req, draft);
+    const messages = buildMessages(
+      history,
+      req.message,
+      Math.min(route.model.contextWindow * HISTORY_CHARS_PER_TOKEN, HISTORY_MAX_CHARS),
+    );
+
+    let provider: LLMProvider;
+    let turn;
+    try {
+      provider = await this.resolve(route);
+      turn = await this.conversations.startTurn({
+        ownerUid: user.uid,
+        conversationId: req.conversationId ?? null,
+        userText: req.message,
+        modelId: route.model.id,
+        providerId: route.model.providerId,
+        retentionDays: this.config.conversationRetentionDays,
+      });
+      if (!turn) throw new NotFoundException('Không tìm thấy hội thoại.');
+    } catch (err) {
+      await this.quota.release(reservation).catch(() => undefined);
+      throw err;
+    }
+    await this.stream(
+      user,
+      route,
+      provider,
+      reservation,
+      turn,
+      messages,
+      maxOutputTokens,
+      requestTime,
+      res,
+    );
+  }
+
+  private async stream(
+    user: UserProfile,
+    route: Route,
+    provider: LLMProvider,
+    reservation: Reservation,
+    turn: { conversationId: string; userMessageId: string; messageId: string },
+    messages: ProviderMessage[],
+    maxOutputTokens: number,
+    requestTime: Date,
+    res: Response,
+  ): Promise<void> {
+    const price = route.model.currentPrice!;
     res.status(200);
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -151,16 +283,11 @@ export class ChatService {
     let stopReason: string | null = null;
     let error: { code: string; message: string } | null = null;
     try {
-      const messages = buildMessages(
-        turn.history,
-        req.message,
-        Math.min(route.model.contextWindow * HISTORY_CHARS_PER_TOKEN, HISTORY_MAX_CHARS),
-      );
       const stream = provider.stream(
         {
           model: route.model.apiModelId,
           messages,
-          maxOutputTokens: Math.min(route.model.maxOutputTokens, MAX_OUTPUT_TOKENS),
+          maxOutputTokens,
           reasoningEffort: route.model.defaultParams.reasoningEffort,
         },
         controller.signal,
@@ -216,19 +343,9 @@ export class ChatService {
     const latencyMs = responseTime.getTime() - requestTime.getTime();
 
     // Settle even when the user cancelled: the ledger is the source of truth for cost.
-    if (usage && cost !== null) {
-      try {
-        const department = user.departmentId ? await this.departments.get(user.departmentId) : null;
-        await this.usage.record({
-          uid: user.uid,
-          departmentId: user.departmentId,
-          departmentPath: department?.path ?? [],
-          appClientId: null,
-          providerId: route.model.providerId,
-          transport: provider.transport,
-          modelId: route.model.id,
-          apiModelId: route.model.apiModelId,
-          priceId: price.id,
+    try {
+      if (usage && cost !== null) {
+        await this.quota.commit(reservation, {
           usage,
           costInput: tokenCost(usage.inputTokens, price.inputPerMTok),
           costCachedInput: tokenCost(
@@ -237,19 +354,26 @@ export class ChatService {
           ),
           costOutput: tokenCost(usage.outputTokens, price.outputPerMTok),
           totalCost: cost,
-          reservedCost: 0,
-          conversationId: turn.conversationId,
+          outcome: status,
           messageId: turn.messageId,
-          routeReason: route.reason,
-          fallbackFrom: null,
-          outcome: status === 'cancelled' ? 'cancelled' : status === 'error' ? 'error' : 'complete',
-          requestTime,
-          responseTime,
+          conversationId: turn.conversationId,
           latencyMs,
+          responseTime,
         });
-      } catch (err) {
-        this.logger.error(`Không ghi được sổ cái cho tin nhắn ${turn.messageId}: ${String(err)}`);
+      } else {
+        await this.quota.release(reservation);
       }
+    } catch (err) {
+      // The sweeper releases the reservation; a missing commit is logged for reconciliation.
+      this.logger.error(
+        JSON.stringify({
+          event: 'settle_failed',
+          uid: user.uid,
+          txnId: reservation.txnId,
+          cost,
+          detail: String(err),
+        }),
+      );
     }
     try {
       await this.conversations.finishTurn(turn.conversationId, turn.messageId, {

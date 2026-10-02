@@ -6,8 +6,8 @@ import {
   ConversationStore,
   DepartmentStore,
   getDb,
+  QuotaService,
   RegistryStore,
-  UsageStore,
   UserStore,
 } from '@uniai/firestore';
 import { ModelsController } from './ai/models.controller.js';
@@ -22,7 +22,7 @@ import { ProvidersController } from './ai/providers.controller.js';
 import { REGISTRY_STORE } from './ai/tokens.js';
 import { RegistryCache } from './ai/registry-cache.js';
 import { ChatController } from './chat/chat.controller.js';
-import { CONVERSATION_STORE, ChatService, USAGE_STORE } from './chat/chat.service.js';
+import { CONVERSATION_STORE, ChatService, QUOTA_SERVICE } from './chat/chat.service.js';
 import { ConversationsController } from './chat/conversations.controller.js';
 import { ModelRouter } from './chat/model-router.js';
 import { AuditLogsController } from './audit/audit-logs.controller.js';
@@ -41,6 +41,7 @@ import { DEPARTMENT_STORE, DepartmentsController } from './departments/departmen
 import { DirectoryController } from './directory/directory.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
+import { AdminQuotaController, MyQuotaController } from './quota/quota.controller.js';
 import { AdminUsersController } from './users/admin-users.controller.js';
 
 export interface AppOverrides {
@@ -72,6 +73,8 @@ export class AppModule {
         ModelsController,
         ChatController,
         ConversationsController,
+        MyQuotaController,
+        AdminQuotaController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -103,7 +106,7 @@ export class AppModule {
         ModelRouter,
         ChatService,
         { provide: CONVERSATION_STORE, useFactory: () => new ConversationStore(getDb()) },
-        { provide: USAGE_STORE, useFactory: () => new UsageStore(getDb()) },
+        { provide: QUOTA_SERVICE, useFactory: () => new QuotaService(getDb()) },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: DomainErrorFilter },

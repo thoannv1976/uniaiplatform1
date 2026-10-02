@@ -2,13 +2,20 @@ import type { INestApplication } from '@nestjs/common';
 import { healthResponseSchema } from '@uniai/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createWorker } from './app.js';
+import { createWorker, type WorkerJobs } from './app.js';
 import { loadConfig } from './config.js';
 
 let app: INestApplication;
 
+const calls: string[] = [];
+const jobs: WorkerJobs = {
+  rollover: () => (calls.push('rollover'), Promise.resolve({ period: '202610', created: 3 })),
+  sweepReservations: () => (calls.push('sweep'), Promise.resolve(2)),
+  expireAdjustments: () => (calls.push('expire'), Promise.resolve(1)),
+};
+
 beforeAll(async () => {
-  app = await createWorker(loadConfig({}), { quiet: true });
+  app = await createWorker(loadConfig({}), { quiet: true, jobs });
   await app.init();
 });
 
@@ -27,5 +34,18 @@ describe('worker', () => {
       .get('/health')
       .set('Origin', 'https://uniaiplatform1.web.app');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('runs the scheduled jobs', async () => {
+    const server = app.getHttpServer();
+    expect((await request(server).post('/jobs/quota-rollover').expect(200)).body).toEqual({
+      period: '202610',
+      created: 3,
+    });
+    expect((await request(server).post('/jobs/reservation-sweeper').expect(200)).body).toEqual({
+      released: 2,
+      reverted: 1,
+    });
+    expect(calls).toEqual(['rollover', 'sweep', 'expire']);
   });
 });

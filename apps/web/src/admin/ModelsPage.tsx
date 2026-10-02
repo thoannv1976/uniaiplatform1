@@ -9,7 +9,6 @@ import {
   PROVIDER_IDS,
   PROVIDER_LABELS_VI,
   REASONING_EFFORTS,
-  usdToMicro,
   type ModelCapability,
   type ModelTier,
   type ModelView,
@@ -20,6 +19,7 @@ import {
   type UpdateModelRequest,
 } from '@uniai/shared';
 import { useEffect, useState, type ReactNode } from 'react';
+import { parseUsd } from '../lib/usd';
 import {
   addPrice,
   createModel,
@@ -56,12 +56,7 @@ const field = 'rounded border border-slate-300 px-2 py-1';
 export const perMTok = (micro: number | null | undefined) =>
   micro === null || micro === undefined ? '–' : `$${microToUsd(micro)}`;
 
-/** Parses an admin-typed USD amount ("0.25" or "0,25") into micro-USD; null if invalid. */
-export function parseUsd(text: string): number | null {
-  const value = Number(text.trim().replace(',', '.'));
-  if (text.trim() === '' || !Number.isFinite(value) || value < 0) return null;
-  return usdToMicro(value);
-}
+export { parseUsd };
 
 type Panel = { id: string; kind: 'edit' | 'prices' | 'test' } | null;
 

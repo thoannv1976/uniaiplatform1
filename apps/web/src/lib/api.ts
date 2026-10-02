@@ -1,4 +1,18 @@
 import {
+  budgetListResponseSchema,
+  quotaAdjustmentListResponseSchema,
+  quotaAdjustmentSchema,
+  quotaListResponseSchema,
+  quotaSummarySchema,
+  quotaTierSchema,
+  type Budget,
+  type QuotaAdjustment,
+  type QuotaAdjustmentRequest,
+  type QuotaSummary,
+  type QuotaTier,
+  type QuotaTierId,
+  type SetBudgetRequest,
+  type UpdateQuotaTierRequest,
   conversationDetailResponseSchema,
   conversationListResponseSchema,
   conversationSchema,
@@ -320,4 +334,68 @@ export async function deleteConversation(idToken: string, id: string): Promise<v
     headers: { Authorization: `Bearer ${idToken}` },
   });
   if (!res.ok) throw await readError(res);
+}
+
+// ---- M7: quotas and budgets ----
+
+export async function fetchMyQuota(idToken: string): Promise<QuotaSummary> {
+  return quotaSummarySchema.parse(await call('/api/me/quota', idToken));
+}
+
+export async function fetchQuotas(
+  idToken: string,
+  period?: string,
+): Promise<{ period: string; quotas: QuotaSummary[] }> {
+  const query = period ? `?period=${period}` : '';
+  return quotaListResponseSchema.parse(await call(`/api/admin/quotas${query}`, idToken));
+}
+
+export async function adjustQuota(
+  idToken: string,
+  input: Omit<QuotaAdjustmentRequest, 'kind'> & { kind?: QuotaAdjustmentRequest['kind'] },
+): Promise<QuotaAdjustment> {
+  const body = JSON.stringify(input);
+  return quotaAdjustmentSchema.parse(
+    await call('/api/admin/quota-adjustments', idToken, { method: 'POST', body }),
+  );
+}
+
+export async function fetchAdjustments(idToken: string): Promise<QuotaAdjustment[]> {
+  return quotaAdjustmentListResponseSchema.parse(
+    await call('/api/admin/quota-adjustments', idToken),
+  ).adjustments;
+}
+
+export async function fetchBudgets(
+  idToken: string,
+  period?: string,
+): Promise<{ period: string; budgets: Budget[] }> {
+  const query = period ? `?period=${period}` : '';
+  return budgetListResponseSchema.parse(await call(`/api/admin/budgets${query}`, idToken));
+}
+
+export async function setBudget(idToken: string, departmentId: string, input: SetBudgetRequest) {
+  const body = JSON.stringify(input);
+  return budgetListResponseSchema.parse(
+    await call(`/api/admin/budgets/${encodeURIComponent(departmentId)}`, idToken, {
+      method: 'PUT',
+      body,
+    }),
+  );
+}
+
+export async function fetchQuotaTiers(idToken: string): Promise<QuotaTier[]> {
+  const raw = (await call('/api/admin/quota-tiers', idToken)) as { tiers: unknown[] };
+  return raw.tiers.map((t) => quotaTierSchema.parse(t));
+}
+
+export async function updateQuotaTier(
+  idToken: string,
+  id: QuotaTierId,
+  patch: UpdateQuotaTierRequest,
+): Promise<QuotaTier> {
+  const body = JSON.stringify(patch);
+  return quotaTierSchema.parse(
+    await call(`/api/admin/quota-tiers/${id}`, idToken, { method: 'PATCH', body }),
+  );
 }
