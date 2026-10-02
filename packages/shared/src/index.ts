@@ -7,3 +7,4 @@ export * from './csv.js';
 export * from './departments.js';
 export * from './directory.js';
 export * from './models.js';
+export * from './chat.js';

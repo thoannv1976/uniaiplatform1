@@ -237,6 +237,27 @@ describe('role matrix', () => {
       ok: 201,
     },
     {
+      name: 'GET /api/ai/models',
+      call: () => http().get('/api/ai/models'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'POST /api/ai/chat',
+      call: () => http().post('/api/ai/chat').send({ message: 'Xin chào' }),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'GET /api/conversations',
+      call: () => http().get('/api/conversations'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'POST /api/conversations',
+      call: () => http().post('/api/conversations').send({}),
+      allowed: [...ROLES],
+      ok: 201,
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],

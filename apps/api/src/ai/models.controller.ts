@@ -31,7 +31,8 @@ import { Roles } from '../auth/decorators.js';
 import { parseOrBadRequest } from '../common/zod.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
 import { ProviderRuntime, ProviderUnavailableError } from './provider-runtime.js';
-import { REGISTRY_STORE } from './providers.controller.js';
+import { RegistryCache } from './registry-cache.js';
+import { REGISTRY_STORE } from './tokens.js';
 
 /** Admin test calls stay short and cheap. */
 const TEST_MAX_OUTPUT_TOKENS = 1024;
@@ -48,6 +49,7 @@ export class ModelsController {
     @Inject(REGISTRY_STORE) private readonly registry: RegistryStore,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly runtime: ProviderRuntime,
+    private readonly cache: RegistryCache,
     private readonly audit: AuditService,
   ) {}
 
@@ -62,6 +64,7 @@ export class ModelsController {
   async create(@CurrentAuth() auth: AuthContext, @Body() body: unknown): Promise<ModelView> {
     const input = parseOrBadRequest(createModelRequestSchema, body);
     const created = await this.registry.createModel(input, auth.profile.uid);
+    this.cache.invalidate();
     await this.audit.record({
       event: 'ADMIN_CHANGE',
       actor: auth.profile.uid,
@@ -79,6 +82,7 @@ export class ModelsController {
     const created = await this.registry.seedDefaults(auth.profile.uid, {
       includeMock: this.config.mockProviderEnabled,
     });
+    this.cache.invalidate();
     if (created.length > 0) {
       await this.audit.record({
         event: 'ADMIN_CHANGE',
@@ -100,6 +104,7 @@ export class ModelsController {
     const id = modelIdOr404(rawId);
     const patch = parseOrBadRequest(updateModelRequestSchema, body);
     const { before, after } = await this.registry.updateModel(id, patch, auth.profile.uid);
+    this.cache.invalidate();
     const changed = Object.keys(patch) as (keyof typeof patch)[];
     await this.audit.record({
       event: 'ADMIN_CHANGE',
@@ -132,6 +137,7 @@ export class ModelsController {
     const id = modelIdOr404(rawId);
     const input = parseOrBadRequest(newPriceSchema, body);
     const price = await this.registry.addPrice(id, input, auth.profile.uid);
+    this.cache.invalidate();
     await this.audit.record({
       event: 'ADMIN_CHANGE',
       actor: auth.profile.uid,

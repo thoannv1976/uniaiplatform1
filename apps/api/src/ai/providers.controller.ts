@@ -24,8 +24,8 @@ import { CurrentAuth } from '../auth/current-user.js';
 import { Roles } from '../auth/decorators.js';
 import { parseOrBadRequest } from '../common/zod.js';
 import { ProviderRuntime } from './provider-runtime.js';
-
-export const REGISTRY_STORE = Symbol('REGISTRY_STORE');
+import { RegistryCache } from './registry-cache.js';
+import { REGISTRY_STORE } from './tokens.js';
 
 export function providerIdOr404(raw: string): ProviderId {
   if (!(PROVIDER_IDS as readonly string[]).includes(raw)) {
@@ -39,6 +39,7 @@ export class ProvidersController {
   constructor(
     @Inject(REGISTRY_STORE) private readonly registry: RegistryStore,
     private readonly runtime: ProviderRuntime,
+    private readonly cache: RegistryCache,
     private readonly audit: AuditService,
   ) {}
 
@@ -58,6 +59,7 @@ export class ProvidersController {
     const id = providerIdOr404(rawId);
     const patch = parseOrBadRequest(updateProviderRequestSchema, body);
     const { before, after } = await this.registry.updateProvider(id, patch, auth.profile.uid);
+    this.cache.invalidate();
     await this.audit.record({
       event: 'ADMIN_CHANGE',
       actor: auth.profile.uid,
@@ -100,6 +102,7 @@ export class ProvidersController {
     }
     const last4 = apiKey.slice(-4);
     const view = await this.registry.recordKey(id, last4, auth.profile.uid);
+    this.cache.invalidate();
     await this.audit.record({
       event: 'ADMIN_CHANGE',
       actor: auth.profile.uid,

@@ -2,7 +2,8 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M4 (Claude Code): thêm 3 secret API key riêng cho staging (cần chạy lại bootstrap),
+Cập nhật lần cuối: 02/10/2026 – M5 (Claude Code): index `conversations`, `usageTransactions` và TTL `expireAt`
+(khai trong `firestore.indexes.json`, deploy tự áp dụng). Trước đó – M4 (Claude Code): thêm 3 secret API key riêng cho staging (cần chạy lại bootstrap),
 biến `VERTEX_LOCATION`, `ENABLE_MOCK_PROVIDER`; collection `providers`, `models`. Trước đó (01/10): bootstrap đã chạy
 (Cowork, Issue #2), deploy staging xanh sau khi đổi `/healthz` → `/health`.
 Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
@@ -24,14 +25,16 @@ Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 
 ### Dữ liệu Firestore (M2, xem ADR 0003)
 
-| Collection                      | Nội dung                                                                           | Ghi bởi                                              |
-| ------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `userDirectory/{email}`         | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                             | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
-| `users/{uid}`                   | Hồ sơ tạo khi đăng nhập lần đầu                                                    | API                                                  |
-| `auditLogs`                     | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`) | API, script ops                                      |
-| `departments/{id}`              | Cây đơn vị (M3)                                                                    | trang quản trị, nhập CSV                             |
-| `providers/{id}`                | Cách gọi, bật/tắt, thứ tự dự phòng, **metadata** key (`last4`) – không có key (M4) | trang quản trị                                       |
-| `models/{id}`, `…/prices/{pid}` | Model Registry và lịch sử giá micro-USD/1M token, chỉ thêm (M4)                    | trang quản trị (**Nạp danh mục mẫu**)                |
+| Collection                               | Nội dung                                                                           | Ghi bởi                                              |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `userDirectory/{email}`                  | Vai trò/trạng thái/đơn vị nhà trường cấp cho một email                             | `pnpm ops:grant-role`, trang quản trị, (M3) nhập CSV |
+| `users/{uid}`                            | Hồ sơ tạo khi đăng nhập lần đầu                                                    | API                                                  |
+| `auditLogs`                              | Nhật ký chỉ-thêm (`USER_LOGIN`, `USER_PROVISIONED`, `AUTH_DENIED`, `ADMIN_CHANGE`) | API, script ops                                      |
+| `departments/{id}`                       | Cây đơn vị (M3)                                                                    | trang quản trị, nhập CSV                             |
+| `providers/{id}`                         | Cách gọi, bật/tắt, thứ tự dự phòng, **metadata** key (`last4`) – không có key (M4) | trang quản trị                                       |
+| `conversations/{id}`, `…/messages/{mid}` | Hội thoại riêng của từng người; `expireAt` + TTL 180 ngày (D8) (M5)                | API (`/api/ai/chat`, `/api/conversations`)           |
+| `usageTransactions/{id}`                 | Sổ cái chi phí, chỉ thêm, không TTL (M5)                                           | API                                                  |
+| `models/{id}`, `…/prices/{pid}`          | Model Registry và lịch sử giá micro-USD/1M token, chỉ thêm (M4)                    | trang quản trị (**Nạp danh mục mẫu**)                |
 
 Super Admin: staging = _chưa cấp_; production = _chưa cấp_.
 
@@ -45,16 +48,17 @@ Super Admin: staging = _chưa cấp_; production = _chưa cấp_.
 
 ### Biến môi trường Cloud Run (do `deploy.yml` đặt)
 
-| Biến                    | API                                                     | Worker                  |
-| ----------------------- | ------------------------------------------------------- | ----------------------- |
-| `APP_VERSION`           | `<ref>-<sha7>`                                          | `<ref>-<sha7>`          |
-| `GCLOUD_PROJECT`        | `uniaiplatform1`                                        | `uniaiplatform1`        |
-| `FIRESTORE_DATABASE_ID` | `staging` / `(default)`                                 | `staging` / `(default)` |
-| `ALLOWED_EMAIL_DOMAINS` | `ftu.edu.vn`                                            | –                       |
-| `WEB_ORIGINS`           | `https://<site>.web.app,https://<site>.firebaseapp.com` | –                       |
-| `EXTRA_ALLOWED_EMAILS`  | biến GitHub cùng tên (ADR 0004), mặc định rỗng          | –                       |
-| `VERTEX_LOCATION`       | `global` (M4)                                           | –                       |
-| `ENABLE_MOCK_PROVIDER`  | `true` (staging) / `false` (production) (M4)            | –                       |
+| Biến                          | API                                                     | Worker                  |
+| ----------------------------- | ------------------------------------------------------- | ----------------------- |
+| `APP_VERSION`                 | `<ref>-<sha7>`                                          | `<ref>-<sha7>`          |
+| `GCLOUD_PROJECT`              | `uniaiplatform1`                                        | `uniaiplatform1`        |
+| `FIRESTORE_DATABASE_ID`       | `staging` / `(default)`                                 | `staging` / `(default)` |
+| `ALLOWED_EMAIL_DOMAINS`       | `ftu.edu.vn`                                            | –                       |
+| `WEB_ORIGINS`                 | `https://<site>.web.app,https://<site>.firebaseapp.com` | –                       |
+| `EXTRA_ALLOWED_EMAILS`        | biến GitHub cùng tên (ADR 0004), mặc định rỗng          | –                       |
+| `VERTEX_LOCATION`             | `global` (M4)                                           | –                       |
+| `CONVERSATION_RETENTION_DAYS` | không đặt = 180 ngày (D8)                               | –                       |
+| `ENABLE_MOCK_PROVIDER`        | `true` (staging) / `false` (production) (M4)            | –                       |
 
 ## GitHub (`thoannv1976/uniaiplatform1`, public)
 

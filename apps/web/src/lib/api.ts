@@ -1,4 +1,9 @@
 import {
+  chatModelListResponseSchema,
+  createSseParser,
+  type ChatModelOption,
+  type ChatRequest,
+  type ChatStreamEvent,
   modelListResponseSchema,
   modelViewSchema,
   priceListResponseSchema,
@@ -243,4 +248,40 @@ export async function testModel(
       body,
     }),
   );
+}
+
+// ---- M5: chat ----
+
+export async function fetchChatModels(idToken: string): Promise<ChatModelOption[]> {
+  return chatModelListResponseSchema.parse(await call('/api/ai/models', idToken)).models;
+}
+
+/**
+ * POST /api/ai/chat and hand each Server-Sent Event to `onEvent` as it arrives. The API is
+ * called directly on Cloud Run (no Hosting rewrite, which would cut streams at 60 s).
+ * Aborting `signal` cancels the answer; the API still settles its cost.
+ */
+export async function streamChat(
+  idToken: string,
+  request: Partial<ChatRequest> & { message: string },
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/ai/chat`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!res.ok) throw await readError(res);
+  if (!res.body)
+    throw new ApiError(res.status, 'Trình duyệt không hỗ trợ nhận dữ liệu dạng stream');
+  const parser = createSseParser(onEvent);
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    parser.push(value);
+  }
+  parser.end();
 }

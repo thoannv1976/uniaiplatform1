@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MockProvider } from './mock.js';
+import { MockProvider, parseMockDirectives } from './mock.js';
 import type { ChatChunk, NormalizedChatRequest } from './types.js';
 
 const req = (content: string, maxOutputTokens = 1000): NormalizedChatRequest => ({
@@ -50,5 +50,38 @@ describe('MockProvider', () => {
     expect(chunks).toEqual([
       { type: 'error', code: 'unavailable', message: 'down', retryable: true },
     ]);
+  });
+});
+
+describe('MockProvider directives', () => {
+  it('parses slow and fail switches', () => {
+    expect(parseMockDirectives('[mock:slow=75] chào')).toEqual({
+      slowSeconds: 75,
+      failWith: undefined,
+    });
+    expect(parseMockDirectives('[mock:slow=999]').slowSeconds).toBe(900);
+    expect(parseMockDirectives('[mock:fail=429]').failWith).toMatchObject({
+      code: 'rate_limited',
+      status: 429,
+    });
+    expect(parseMockDirectives('[mock:fail=418]').failWith).toBeUndefined();
+  });
+
+  it('fails on request and streams ticks while slow', async () => {
+    const failed = await collect(new MockProvider().stream(req('[mock:fail=500] hi')));
+    expect(failed).toEqual([
+      {
+        type: 'error',
+        code: 'unavailable',
+        message: 'mock: HTTP 500',
+        retryable: true,
+        status: 500,
+      },
+    ]);
+    const started = Date.now();
+    const slow = await collect(new MockProvider().stream(req('[mock:slow=1] hi')));
+    expect(Date.now() - started).toBeGreaterThanOrEqual(900);
+    expect(slow[0]).toEqual({ type: 'text', delta: '1… ' });
+    expect(slow.at(-1)).toEqual({ type: 'done', stopReason: 'end' });
   });
 });

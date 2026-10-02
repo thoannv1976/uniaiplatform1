@@ -1,7 +1,15 @@
 import { Module, type DynamicModule, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { GcpSecretStore, MemorySecretStore, type SecretStore } from '@uniai/ai-providers';
-import { AuditStore, DepartmentStore, getDb, RegistryStore, UserStore } from '@uniai/firestore';
+import {
+  AuditStore,
+  ConversationStore,
+  DepartmentStore,
+  getDb,
+  RegistryStore,
+  UsageStore,
+  UserStore,
+} from '@uniai/firestore';
 import { ModelsController } from './ai/models.controller.js';
 import {
   defaultProviderFactory,
@@ -10,7 +18,13 @@ import {
   SECRET_STORE,
   type ProviderFactory,
 } from './ai/provider-runtime.js';
-import { ProvidersController, REGISTRY_STORE } from './ai/providers.controller.js';
+import { ProvidersController } from './ai/providers.controller.js';
+import { REGISTRY_STORE } from './ai/tokens.js';
+import { RegistryCache } from './ai/registry-cache.js';
+import { ChatController } from './chat/chat.controller.js';
+import { CONVERSATION_STORE, ChatService, USAGE_STORE } from './chat/chat.service.js';
+import { ConversationsController } from './chat/conversations.controller.js';
+import { ModelRouter } from './chat/model-router.js';
 import { AuditLogsController } from './audit/audit-logs.controller.js';
 import { AUDIT_STORE, AuditService } from './audit/audit.service.js';
 import { AuthGuard, USER_STORE } from './auth/auth.guard.js';
@@ -56,6 +70,8 @@ export class AppModule {
         DirectoryController,
         ProvidersController,
         ModelsController,
+        ChatController,
+        ConversationsController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -83,6 +99,11 @@ export class AppModule {
           useValue: overrides.providerFactory ?? defaultProviderFactory,
         },
         ProviderRuntime,
+        RegistryCache,
+        ModelRouter,
+        ChatService,
+        { provide: CONVERSATION_STORE, useFactory: () => new ConversationStore(getDb()) },
+        { provide: USAGE_STORE, useFactory: () => new UsageStore(getDb()) },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: DomainErrorFilter },

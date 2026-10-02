@@ -20,7 +20,8 @@
         "FIRESTORE_EMULATOR_HOST",
         "FIREBASE_AUTH_EMULATOR_HOST",
         "FIREBASE_STORAGE_EMULATOR_HOST",
-        "GCLOUD_PROJECT"
+        "GCLOUD_PROJECT",
+        "LONG_STREAM_TEST"
       ]
     },
     "dev": {
