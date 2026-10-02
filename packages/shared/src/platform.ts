@@ -8,12 +8,13 @@ import { modelIdSchema, MODEL_TIERS, PROVIDER_IDS } from './models.js';
  * its own monthly budget (micro-USD) and rate limit, and is billed in the same ledger.
  */
 
-export const APP_SCOPES = ['chat', 'models', 'usage'] as const;
+export const APP_SCOPES = ['chat', 'models', 'usage', 'agents'] as const;
 export type AppScope = (typeof APP_SCOPES)[number];
 export const APP_SCOPE_LABELS_VI: Record<AppScope, string> = {
   chat: 'Gọi AI (chat)',
   models: 'Xem danh sách model',
   usage: 'Xem mức sử dụng của ứng dụng',
+  agents: 'Chạy agent (M18)',
 };
 
 export const APP_STATUSES = ['active', 'disabled'] as const;

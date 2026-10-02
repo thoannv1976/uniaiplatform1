@@ -8,6 +8,7 @@ import { KnowledgePage } from './admin/KnowledgePage';
 import { RouterPage } from './admin/RouterPage';
 import { DlpPage } from './admin/DlpPage';
 import { AppClientsPage } from './admin/AppClientsPage';
+import { AgentsPage } from './admin/AgentsPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
 import { ProvidersPage } from './admin/ProvidersPage';
@@ -26,6 +27,9 @@ import { ROLE_LABELS_VI, TERMS_VERSION } from '@uniai/shared';
 
 // Markdown, math and code highlighting are only loaded once someone opens the chat.
 const ChatPage = lazy(() => import('./chat/ChatPage').then((m) => ({ default: m.ChatPage })));
+const AssistantsPage = lazy(() =>
+  import('./agents/AssistantsPage').then((m) => ({ default: m.AssistantsPage })),
+);
 
 const PEOPLE_ADMINS: Role[] = ['super_admin', 'auditor', 'unit_admin'];
 const DEPARTMENT_VIEWERS: Role[] = ['super_admin', 'auditor', 'unit_admin', 'ai_admin'];
@@ -49,9 +53,11 @@ export const ADMIN_PATHS = {
   knowledge: '/quan-tri/kho-tri-thuc',
   dlp: '/quan-tri/dlp',
   apps: '/quan-tri/ung-dung',
+  agents: '/quan-tri/agent',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
 export const WORKSPACE_PATH = '/khong-gian';
+export const ASSISTANTS_PATH = '/tro-ly';
 
 /** First admin page a role may open. */
 function adminHome(role: Role): string {
@@ -79,6 +85,9 @@ function Home() {
           </span>
           <Link to={WORKSPACE_PATH} className="text-sky-800 underline">
             Không gian làm việc
+          </Link>
+          <Link to={ASSISTANTS_PATH} className="text-sky-800 underline">
+            Trợ lý AI
           </Link>
           <Link to={MY_USAGE_PATH} className="text-sky-800 underline">
             Mức sử dụng
@@ -192,6 +201,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
             Ứng dụng
           </NavLink>
         )}
+        {REGISTRY_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.agents} className={tabClass}>
+            Agent AI
+          </NavLink>
+        )}
         {DLP_VIEWERS.includes(role) && (
           <NavLink to={ADMIN_PATHS.dlp} className={tabClass}>
             DLP
@@ -241,6 +255,28 @@ function WorkspaceRoute() {
         ← Trang chủ
       </Link>
       <WorkspacePage role={profile.profile.role} getToken={getToken} />
+    </>
+  );
+}
+
+function AssistantsRoute() {
+  const { profile, getToken } = useAuth();
+  if (profile.kind === 'loading') return <p>Đang tải…</p>;
+  if (
+    profile.kind !== 'ok' ||
+    profile.profile.status !== 'active' ||
+    profile.profile.termsVersion !== TERMS_VERSION
+  ) {
+    return <Navigate to="/" replace />;
+  }
+  return (
+    <>
+      <Link to="/" className="text-sm text-sky-800 underline">
+        ← Trang chủ
+      </Link>
+      <Suspense fallback={<p>Đang tải…</p>}>
+        <AssistantsPage getToken={getToken} />
+      </Suspense>
     </>
   );
 }
@@ -366,6 +402,14 @@ function AdminPages() {
         }
       />
       <Route
+        path="agent"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => <AgentsPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />}
+          </AdminRoute>
+        }
+      />
+      <Route
         path="dlp"
         element={
           <AdminRoute roles={DLP_VIEWERS}>
@@ -424,6 +468,7 @@ export function App() {
             <Route path="/hoi-thoai/:conversationId" element={<Home />} />
             <Route path={MY_USAGE_PATH} element={<MyUsageRoute />} />
             <Route path={WORKSPACE_PATH} element={<WorkspaceRoute />} />
+            <Route path={ASSISTANTS_PATH} element={<AssistantsRoute />} />
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

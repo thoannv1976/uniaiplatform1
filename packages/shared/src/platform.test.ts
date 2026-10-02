@@ -46,16 +46,19 @@ describe('Platform API schemas', () => {
 });
 
 describe('Platform OpenAPI', () => {
-  it('describes the three endpoints and matches docs/platform/openapi.json', () => {
+  it('describes the endpoints and matches docs/platform/openapi.json', () => {
     const doc = buildPlatformOpenApi();
     expect(Object.keys(doc.paths as object)).toEqual([
       '/api/platform/v1/chat',
       '/api/platform/v1/models',
       '/api/platform/v1/usage',
+      '/api/platform/v1/agents',
+      '/api/platform/v1/agents/{id}/run',
     ]);
     const schemas = (doc.components as { schemas: Record<string, { required?: string[] }> })
       .schemas;
     expect(schemas.ChatRequest?.required).toEqual(['messages']);
+    expect(schemas.AgentRunRequest?.required).toEqual(['messages']);
     const committed = readFileSync(
       new URL('../../../docs/platform/openapi.json', import.meta.url),
       'utf8',

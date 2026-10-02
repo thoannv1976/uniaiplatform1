@@ -21,5 +21,6 @@ export * from './router.js';
 export * from './dlp.js';
 export * from './reports.js';
 export * from './apps.js';
+export * from './agents.js';
 export * from './knowledge.js';
 export * from './workspace.js';

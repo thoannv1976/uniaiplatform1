@@ -73,6 +73,8 @@ export interface ReserveInput {
   appClientId?: string | null;
   /** Free text from the app (ledger only). */
   reference?: string | null;
+  /** The agent whose step this request is (M18), recorded in the ledger. */
+  agentId?: string | null;
   now?: Date;
 }
 
@@ -351,6 +353,7 @@ export class QuotaService {
         messageId: null,
         routeReason: input.routeReason,
         fallbackFrom: input.fallbackFrom ?? null,
+        agentId: input.agentId ?? null,
         requestTime: Timestamp.fromDate(now),
       });
     });
@@ -450,6 +453,7 @@ export class QuotaService {
         messageId: null,
         routeReason: input.routeReason,
         fallbackFrom: input.fallbackFrom ?? null,
+        agentId: input.agentId ?? null,
         requestTime: Timestamp.fromDate(now),
       });
     });

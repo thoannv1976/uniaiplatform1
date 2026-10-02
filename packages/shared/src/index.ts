@@ -20,3 +20,4 @@ export * from './dlp.js';
 export * from './reports.js';
 export * from './platform.js';
 export * from './platform-openapi.js';
+export * from './agents.js';
