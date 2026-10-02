@@ -73,6 +73,8 @@ export function ChatTestPage({
     if (e.type === 'meta') {
       setConversationId(e.conversationId);
       updateLast((t) => ({ ...t, model: e.model.displayName, routeReason: e.routeReason }));
+    } else if (e.type === 'citations') {
+      // The test page does not use knowledge bases.
     } else if (e.type === 'delta') {
       updateLast((t) => ({ ...t, text: t.text + e.text }));
     } else if (e.type === 'error') {

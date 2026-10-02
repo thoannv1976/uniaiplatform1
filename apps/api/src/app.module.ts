@@ -58,7 +58,9 @@ import { DEPARTMENT_STORE, DepartmentsController } from './departments/departmen
 import { DirectoryController } from './directory/directory.controller.js';
 import { FilesController } from './files/files.controller.js';
 import { CloudTasksIngestQueue, InlineIngestQueue } from './knowledge/ingest-queue.js';
+import { KnowledgeChatController } from './knowledge/knowledge-chat.controller.js';
 import { KnowledgeController } from './knowledge/knowledge.controller.js';
+import { KnowledgeRetrieval } from './knowledge/retrieval.service.js';
 import { EMBEDDER, INGEST_QUEUE, KNOWLEDGE_STORE, type IngestQueue } from './knowledge/tokens.js';
 import { BLOB_STORE, FILE_STORE, FilesService } from './files/files.service.js';
 import { HealthController } from './health/health.controller.js';
@@ -115,6 +117,7 @@ export class AppModule {
         KillSwitchController,
         RouterController,
         KnowledgeController,
+        KnowledgeChatController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -170,6 +173,7 @@ export class AppModule {
               ? new VertexEmbedder(config.gcpProject, config.embeddings.location)
               : new MockEmbedder()),
         },
+        KnowledgeRetrieval,
         {
           provide: INGEST_QUEUE,
           inject: [KNOWLEDGE_STORE, BLOB_STORE, EMBEDDER],

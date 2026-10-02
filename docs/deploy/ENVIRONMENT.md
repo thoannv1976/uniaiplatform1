@@ -2,7 +2,7 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M12 (Claude Code): Cloud Tasks `uniai-kb-ingest[-staging]` (`infra/knowledge.sh`),
+Cập nhật lần cuối: 02/10/2026 – M13 (Claude Code): RAG trong chat (không cần hạ tầng mới; `conversations.knowledgeBaseIds`, `messages.citations`). Trước đó – M12 (Claude Code): Cloud Tasks `uniai-kb-ingest[-staging]` (`infra/knowledge.sh`),
 worker deploy trước API, biến `WORKER_URL`/`KB_TASKS_QUEUE`/`TASKS_SA_EMAIL` (API) và `FILES_BUCKET`/`EMBEDDING_LOCATION`
 (worker, 1 GiB), index vector `chunks`; collection `knowledgeBases`, `documents`, `chunks`. Trước đó – M11 (Claude Code): `settings/router` (luật Smart Router, không cần hạ tầng). Trước đó – M10 (Claude Code): `infra/hardening.sh` (PITR, backup hằng ngày 14 ngày, log bucket
 `uniai-audit` + sink, cảnh báo lỗi > 5 %), `settings/killSwitch`, runbook vận hành và checklist go-live. Trước đó – M9 (Claude Code): bucket `gs://uniaiplatform1-uploads` (`infra/storage.sh`: CORS,
