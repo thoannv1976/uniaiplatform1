@@ -85,3 +85,21 @@ describe('MockProvider directives', () => {
     expect(slow.at(-1)).toEqual({ type: 'done', stopReason: 'end' });
   });
 });
+
+describe('MockProvider tool directive', () => {
+  it('answers with exactly the requested tool call', async () => {
+    const chunks = [];
+    for await (const c of new MockProvider().stream({
+      model: 'mock-economy',
+      messages: [
+        { role: 'user', content: 'Tra cứu [mock:tool=lms.get_course {"courseId":"KT101"}]' },
+      ],
+      maxOutputTokens: 1000,
+    })) {
+      chunks.push(c);
+    }
+    const text = chunks.flatMap((c) => (c.type === 'text' ? [c.delta] : [])).join('');
+    expect(JSON.parse(text)).toEqual({ tool: 'lms.get_course', arguments: { courseId: 'KT101' } });
+    expect(chunks.at(-1)).toEqual({ type: 'done', stopReason: 'end' });
+  });
+});

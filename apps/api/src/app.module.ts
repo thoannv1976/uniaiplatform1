@@ -14,7 +14,9 @@ import {
   AuditStore,
   ConversationStore,
   DepartmentStore,
+  AgentStore,
   AppClientStore,
+  IntegrationStore,
   DlpPolicyStore,
   FileStore,
   GcsBlobStore,
@@ -76,6 +78,11 @@ import { CircuitBreaker } from './resilience/circuit-breaker.js';
 import { RouterController } from './router/router.controller.js';
 import { DlpController } from './dlp/dlp.controller.js';
 import { APP_CLIENT_STORE } from './platform/tokens.js';
+import { AgentRunner } from './agents/agent-runner.service.js';
+import { AgentsController } from './agents/agents.controller.js';
+import { IntegrationClient } from './agents/integration-client.js';
+import { IntegrationsController } from './agents/integrations.controller.js';
+import { AGENT_STORE, INTEGRATION_STORE } from './agents/tokens.js';
 import { AppClientsController } from './platform/app-clients.controller.js';
 import { PlatformChatService } from './platform/platform-chat.service.js';
 import { PlatformController } from './platform/platform.controller.js';
@@ -135,6 +142,8 @@ export class AppModule {
         ReportsController,
         AppClientsController,
         PlatformController,
+        AgentsController,
+        IntegrationsController,
         KnowledgeController,
         KnowledgeChatController,
         PromptsController,
@@ -218,6 +227,10 @@ export class AppModule {
         DlpService,
         ReportsService,
         PlatformChatService,
+        { provide: AGENT_STORE, useFactory: () => new AgentStore(getDb()) },
+        { provide: INTEGRATION_STORE, useFactory: () => new IntegrationStore(getDb()) },
+        IntegrationClient,
+        AgentRunner,
         { provide: CircuitBreaker, useFactory: () => new CircuitBreaker() },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },

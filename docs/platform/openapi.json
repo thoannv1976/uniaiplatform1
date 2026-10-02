@@ -216,6 +216,173 @@
           }
         }
       }
+    },
+    "/api/platform/v1/agents": {
+      "get": {
+        "operationId": "agents",
+        "summary": "Danh sách agent mở cho ứng dụng (quyền \"agents\")",
+        "responses": {
+          "200": {
+            "description": "Các agent đang dùng và được mở cho ứng dụng",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Thiếu hoặc sai API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Thiếu quyền",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform/v1/agents/{id}/run": {
+      "post": {
+        "operationId": "runAgent",
+        "summary": "Chạy một agent (quyền \"agents\")",
+        "description": "Agent có thể gọi công cụ (thao tác chỉ đọc của hệ thống tích hợp) qua nhiều bước, tối đa số bước của agent. Luôn trả Server-Sent Events: `meta`, `tool` (mỗi lần gọi công cụ), `dlp`, `delta`, `done` (số bước, tổng chi phí, lý do dừng), `error`. Mỗi bước trừ vào ngân sách của ứng dụng và ghi sổ cái kèm `agentId` và `reference`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Luồng sự kiện",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Yêu cầu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Thiếu hoặc sai API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Hết ngân sách tháng của ứng dụng",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ứng dụng bị tạm dừng, thiếu quyền, hoặc agent dùng model ngoài phạm vi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không có agent hoặc agent không mở cho ứng dụng",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "DLP chặn nội dung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "DLP cảnh báo: gửi lại với \"dlpAcknowledged\": true nếu chắc chắn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Quá số yêu cầu/phút (xem header Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI tạm dừng (kill switch) hoặc nhà cung cấp không phản hồi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -595,6 +762,260 @@
           "requestsPerMinute"
         ],
         "additionalProperties": false
+      },
+      "AgentsResponse": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "tools": {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(knowledge_search|current_datetime|[a-z][a-z0-9-]{1,29}\\.[a-z][a-z0-9_]{1,39})$"
+                  }
+                }
+              },
+              "required": ["id", "name", "description", "tools"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["agents"],
+        "additionalProperties": false
+      },
+      "AgentRunRequest": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "minItems": 1,
+            "maxItems": 40,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": ["user", "assistant"]
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 50000
+                }
+              },
+              "required": ["role", "content"]
+            }
+          },
+          "dlpAcknowledged": {
+            "type": "boolean"
+          },
+          "reference": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,64}$"
+          }
+        },
+        "required": ["messages"],
+        "additionalProperties": false
+      },
+      "AgentStreamEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "meta"
+              },
+              "agent": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "name"],
+                "additionalProperties": false
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "providerId": {
+                    "type": "string",
+                    "enum": ["openai", "gemini", "anthropic", "mock"]
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": ["economy", "standard", "advanced", "premium"]
+                  }
+                },
+                "required": ["id", "displayName", "providerId", "tier"],
+                "additionalProperties": false
+              },
+              "routeReason": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "agent", "model", "routeReason"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "tool"
+              },
+              "step": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "tool": {
+                "type": "string"
+              },
+              "arguments": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "status": {
+                "type": "string",
+                "enum": ["ok", "error", "denied"]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "step", "tool", "arguments", "status", "message"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "dlp"
+              },
+              "masked": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "detector": {
+                      "type": "string",
+                      "enum": ["cccd", "bank", "password", "secret", "student_data", "confidential"]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["detector", "count"],
+                  "additionalProperties": false
+                }
+              },
+              "acknowledged": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["cccd", "bank", "password", "secret", "student_data", "confidential"]
+                }
+              }
+            },
+            "required": ["type", "masked", "acknowledged"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "delta"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "text"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "done"
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "cost": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "stopReason": {
+                "type": "string",
+                "enum": ["answer", "max_steps", "error", "cancelled"]
+              },
+              "latencyMs": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["type", "steps", "cost", "stopReason", "latencyMs"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "error"
+              },
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "code", "message"],
+            "additionalProperties": false
+          }
+        ]
       },
       "Error": {
         "type": "object",

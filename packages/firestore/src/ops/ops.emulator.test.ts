@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe('passwordProblem', () => {
   it('rejects short, simple and guessable passwords', () => {
-    expect(passwordProblem('Abc@123456', 'a@gmail.com')).toMatch(/12 ký tự/);
+    expect(passwordProblem('Qwe@987654', 'a@gmail.com')).toMatch(/12 ký tự/);
     expect(passwordProblem('alllowercaseonly', 'a@gmail.com')).toMatch(/3 trong 4/);
     expect(passwordProblem('Hoanganh#2026x', 'hoanganh@gmail.com')).toMatch(/tên của email/);
     expect(passwordProblem('Admin#2026-xyz', 'a@gmail.com')).toMatch(/dễ đoán/);
@@ -42,7 +42,7 @@ describe('ops:create-login', () => {
   });
 
   it('refuses a weak password', async () => {
-    process.env.LOGIN_PASSWORD = 'Abc@123456';
+    process.env.LOGIN_PASSWORD = 'Qwe@987654';
     expect(
       await createLogin(['--email', 'weak@gmail.com', '--project', 'demo-uniai', '--yes']),
     ).toBe(2);

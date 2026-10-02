@@ -229,7 +229,8 @@ export function formatSseEvent(event: ChatStreamEvent): string {
  * Incremental SSE parser: feed it decoded text as it arrives; it calls `onEvent` for each
  * complete, valid event. Comments (heartbeats) and unknown events are ignored.
  */
-export function createSseParser(onEvent: (event: ChatStreamEvent) => void) {
+/** Server-Sent Events parser for any event schema (chat, agents, Platform API). */
+export function createEventStreamParser<T>(schema: z.ZodType<T>, onEvent: (event: T) => void) {
   let buffer = '';
   const flush = (block: string) => {
     const data = block
@@ -244,7 +245,7 @@ export function createSseParser(onEvent: (event: ChatStreamEvent) => void) {
     } catch {
       return;
     }
-    const parsed = chatStreamEventSchema.safeParse(json);
+    const parsed = schema.safeParse(json);
     if (parsed.success) onEvent(parsed.data);
   };
   return {
@@ -261,4 +262,8 @@ export function createSseParser(onEvent: (event: ChatStreamEvent) => void) {
       buffer = '';
     },
   };
+}
+
+export function createSseParser(onEvent: (event: ChatStreamEvent) => void) {
+  return createEventStreamParser(chatStreamEventSchema, onEvent);
 }

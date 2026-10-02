@@ -59,6 +59,8 @@ export const AUDIT_EVENTS = [
   'KNOWLEDGE_UPDATE',
   'DLP_ACTION',
   'REPORT_EXPORT',
+  'AGENT_RUN',
+  'INTEGRATION_CALL',
 ] as const;
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];
 

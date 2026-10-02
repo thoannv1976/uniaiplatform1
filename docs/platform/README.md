@@ -8,7 +8,7 @@ máy đọc được: [`openapi.json`](openapi.json) (OpenAPI 3.1; Super Admin/A
 ## 1. Xin cấp ứng dụng
 
 Đơn vị chủ quản gửi yêu cầu cho Super Admin hoặc AI Admin gồm: tên ứng dụng, đơn vị chủ quản, người phụ trách kỹ
-thuật, ngân sách tháng (USD), số yêu cầu/phút, quyền cần (`chat`, `models`, `usage`) và có cần model nhóm Nâng
+thuật, ngân sách tháng (USD), số yêu cầu/phút, quyền cần (`chat`, `models`, `usage`, `agents`) và có cần model nhóm Nâng
 cao/Cao cấp hay không. Quản trị viên tạo ở **Trang quản trị → Ứng dụng**; **API key chỉ hiện một lần**.
 
 - Key có dạng `uak_<mã ứng dụng>_<bí mật>`. Lưu trong kho bí mật của ứng dụng (Secret Manager, biến môi trường
@@ -61,6 +61,14 @@ Trả về:
 - Tiền tính bằng **micro-USD** (số nguyên; 1 USD = 1.000.000).
 
 `GET /api/platform/v1/usage` (quyền `usage`): ngân sách, đã dùng, còn lại trong tháng.
+
+### Agent AI (quyền `agents`, M18)
+
+`GET /api/platform/v1/agents`: các agent được quản trị viên mở cho ứng dụng. `POST
+/api/platform/v1/agents/{id}/run` với `{"messages": [...], "reference": "…"}` luôn trả Server-Sent Events: `meta` →
+`tool` (mỗi lần agent gọi công cụ: tên, tham số, trạng thái) → `delta` → `done` (`steps`, `cost`, `stopReason`).
+Mỗi bước của agent bị tính phí như một lần gọi AI. Ứng dụng không dùng được công cụ tra kho tri thức (phân quyền kho
+theo cán bộ); công cụ của hệ thống tích hợp chỉ đọc dữ liệu và dữ liệu trả về đi qua DLP.
 
 Ví dụ hoàn chỉnh (Node.js 20+, không cần thư viện): [`examples/platform-client/chat.mjs`](../../examples/platform-client/chat.mjs).
 

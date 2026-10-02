@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { agentRunRequestSchema, agentStreamEventSchema, agentSummarySchema } from './agents.js';
 import { apiErrorSchema } from './api.js';
 import {
   platformChatRequestSchema,
@@ -103,6 +104,54 @@ export function buildPlatformOpenApi(): Record<string, unknown> {
           },
         },
       },
+      '/api/platform/v1/agents': {
+        get: {
+          operationId: 'agents',
+          summary: 'Danh sách agent mở cho ứng dụng (quyền "agents")',
+          responses: {
+            '200': {
+              description: 'Các agent đang dùng và được mở cho ứng dụng',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentsResponse' } },
+              },
+            },
+            '401': error('Thiếu hoặc sai API key'),
+            '403': error('Thiếu quyền'),
+          },
+        },
+      },
+      '/api/platform/v1/agents/{id}/run': {
+        post: {
+          operationId: 'runAgent',
+          summary: 'Chạy một agent (quyền "agents")',
+          description:
+            'Agent có thể gọi công cụ (thao tác chỉ đọc của hệ thống tích hợp) qua nhiều bước, tối đa số bước của agent. Luôn trả Server-Sent Events: `meta`, `tool` (mỗi lần gọi công cụ), `dlp`, `delta`, `done` (số bước, tổng chi phí, lý do dừng), `error`. Mỗi bước trừ vào ngân sách của ứng dụng và ghi sổ cái kèm `agentId` và `reference`.',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/AgentRunRequest' } },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Luồng sự kiện',
+              content: {
+                'text/event-stream': { schema: { $ref: '#/components/schemas/AgentStreamEvent' } },
+              },
+            },
+            '400': error('Yêu cầu không hợp lệ'),
+            '401': error('Thiếu hoặc sai API key'),
+            '402': error('Hết ngân sách tháng của ứng dụng'),
+            '403': error('Ứng dụng bị tạm dừng, thiếu quyền, hoặc agent dùng model ngoài phạm vi'),
+            '404': error('Không có agent hoặc agent không mở cho ứng dụng'),
+            '422': error('DLP chặn nội dung'),
+            '428': error('DLP cảnh báo: gửi lại với "dlpAcknowledged": true nếu chắc chắn'),
+            '429': error('Quá số yêu cầu/phút (xem header Retry-After)'),
+            '503': error('AI tạm dừng (kill switch) hoặc nhà cung cấp không phản hồi'),
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -118,6 +167,9 @@ export function buildPlatformOpenApi(): Record<string, unknown> {
         StreamEvent: schema(platformStreamEventSchema, 'output'),
         ModelsResponse: schema(platformModelsResponseSchema, 'output'),
         UsageResponse: schema(platformUsageResponseSchema, 'output'),
+        AgentsResponse: schema(z.object({ agents: z.array(agentSummarySchema) }), 'output'),
+        AgentRunRequest: schema(agentRunRequestSchema, 'input'),
+        AgentStreamEvent: schema(agentStreamEventSchema, 'output'),
         Error: schema(apiErrorSchema, 'output'),
       },
     },

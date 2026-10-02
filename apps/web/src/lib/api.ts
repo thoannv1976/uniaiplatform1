@@ -21,7 +21,13 @@ import {
   type KbDocument,
   type KnowledgeBase,
   type UpdateKnowledgeBaseRequest,
+  agentSchema,
+  agentStreamEventSchema,
+  agentSummarySchema,
   appClientKeyResponseSchema,
+  createEventStreamParser,
+  integrationSchema,
+  testOperationResponseSchema,
   appClientListResponseSchema,
   appClientViewSchema,
   dlpPolicyViewSchema,
@@ -30,6 +36,14 @@ import {
   routerTestResponseSchema,
   routerViewSchema,
   type RouterConfig,
+  type Agent,
+  type AgentRunRequest,
+  type AgentStreamEvent,
+  type AgentSummary,
+  type Integration,
+  type TestOperationResponse,
+  type UpsertAgentRequest,
+  type UpsertIntegrationRequest,
   type AppClientKeyResponse,
   type AppClientView,
   type CreateAppClientRequest,
@@ -828,4 +842,97 @@ export async function rotateAppClientKey(
       method: 'POST',
     }),
   );
+}
+
+// ---- M18: agents and integrations ----
+
+export async function fetchAdminAgents(idToken: string): Promise<Agent[]> {
+  const body = (await call('/api/admin/agents', idToken)) as { agents: unknown[] };
+  return body.agents.map((a) => agentSchema.parse(a));
+}
+
+export async function saveAgent(
+  idToken: string,
+  id: string | null,
+  input: UpsertAgentRequest,
+): Promise<Agent> {
+  return agentSchema.parse(
+    await call(id ? `/api/admin/agents/${encodeURIComponent(id)}` : '/api/admin/agents', idToken, {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function fetchIntegrations(idToken: string): Promise<Integration[]> {
+  const body = (await call('/api/admin/integrations', idToken)) as { integrations: unknown[] };
+  return body.integrations.map((i) => integrationSchema.parse(i));
+}
+
+export async function saveIntegration(
+  idToken: string,
+  id: string,
+  input: UpsertIntegrationRequest,
+): Promise<Integration> {
+  return integrationSchema.parse(
+    await call(`/api/admin/integrations/${encodeURIComponent(id)}`, idToken, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Write-only: the token goes to Secret Manager, only its last 4 characters come back. */
+export async function setIntegrationToken(idToken: string, id: string, token: string) {
+  await call(`/api/admin/integrations/${encodeURIComponent(id)}/token`, idToken, {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export async function testIntegrationOperation(
+  idToken: string,
+  id: string,
+  op: string,
+  args: Record<string, unknown>,
+): Promise<TestOperationResponse> {
+  return testOperationResponseSchema.parse(
+    await call(
+      `/api/admin/integrations/${encodeURIComponent(id)}/operations/${encodeURIComponent(op)}/test`,
+      idToken,
+      { method: 'POST', body: JSON.stringify({ arguments: args }) },
+    ),
+  );
+}
+
+export async function fetchMyAgents(idToken: string): Promise<AgentSummary[]> {
+  const body = (await call('/api/agents', idToken)) as { agents: unknown[] };
+  return body.agents.map((a) => agentSummarySchema.parse(a));
+}
+
+/** Runs an agent and hands each Server-Sent Event to `onEvent`. */
+export async function streamAgent(
+  idToken: string,
+  agentId: string,
+  request: AgentRunRequest,
+  onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/agents/${encodeURIComponent(agentId)}/run`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!res.ok) throw await readError(res);
+  if (!res.body)
+    throw new ApiError(res.status, 'Trình duyệt không hỗ trợ nhận dữ liệu dạng stream');
+  const parser = createEventStreamParser(agentStreamEventSchema, onEvent);
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    parser.push(value);
+  }
+  parser.end();
 }

@@ -22,6 +22,8 @@ export const COLLECTIONS = {
   monthlyReports: 'monthlyReports',
   appClients: 'appClients',
   appQuotaPeriods: 'appQuotaPeriods',
+  agents: 'agents',
+  integrations: 'integrations',
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

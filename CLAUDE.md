@@ -22,7 +22,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
   `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái),
-  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `MonthlyReportStore` + `runMonthlyReport` (ADR 0015), `AppClientStore` (ADR 0016), `DlpPolicyStore`, `SettingsStore`
+  `QuotaService` (định mức, ADR 0006), `FileStore` + `GcsBlobStore` (tệp đính kèm, ADR 0008), `UsageAggregator` + `AlertService` + `runUsageJob` (thống kê, ADR 0007), `MonthlyReportStore` + `runMonthlyReport` (ADR 0015), `AppClientStore` (ADR 0016), `AgentStore` + `IntegrationStore` (ADR 0017), `DlpPolicyStore`, `SettingsStore`
 - `packages/documents` – trích nội dung PDF/DOCX/XLSX/PPTX/văn bản, chia đoạn, `ingestDocument` (kho tri thức)
 - `packages/ai-providers` – interface `LLMProvider`; `Embedder` (Vertex AI / `MockEmbedder`); adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
   `MockProvider`; ảnh trong tin nhắn (`images`); `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
@@ -77,6 +77,12 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   lần); endpoint khai báo `@AppScopeRequired(scope)` thay cho `@Roles`. Định mức ứng dụng qua `QuotaService`
   (`appQuotaPeriods`), sổ cái `uid = app:<id>` + `appClientId`. OpenAPI sinh từ Zod: `docs/platform/openapi.json`
   (`pnpm --filter @uniai/shared openapi`).
+- Agent (ADR 0017): giao thức công cụ JSON trong `packages/shared/src/agents.ts` (một công cụ mỗi bước, tối đa
+  `maxSteps`); mỗi bước giữ/quyết toán qua `QuotaService`, sổ cái có `agentId`. Điểm tích hợp LMS/ERP/SIS **chỉ
+  `GET`**, `https`, cùng origin + dưới `baseUrl`, không redirect, ≤ 100 KB; kết quả qua DLP trước khi đến model.
+  Token chỉ ghi, Secret Manager `integration-<mã>-token[-staging]` (`infra/integration-secret.sh`), Firestore giữ
+  `tokenLast4`. Không đoán API hệ thống thật: chỉ cấu hình theo đặc tả đã duyệt `docs/integrations/<mã>.md`
+  (mẫu `TEMPLATE.md`). Test dùng máy chủ HTTP giả trên localhost + `[mock:tool=…]`.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét
   sổ cái khi mở dashboard. VND chỉ để hiển thị (`formatVnd`, tỷ giá `settings/app`).
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

@@ -441,6 +441,57 @@ describe('role matrix', () => {
       allowed: ['super_admin', 'auditor', 'unit_admin'],
     },
     {
+      name: 'GET /api/admin/agents',
+      call: () => http().get('/api/admin/agents'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'POST /api/admin/agents',
+      call: () => http().post('/api/admin/agents').send({}),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 400,
+    },
+    {
+      name: 'PUT /api/admin/agents/:id',
+      call: () => http().put('/api/admin/agents/missing').send({}),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 400,
+    },
+    {
+      name: 'GET /api/admin/integrations',
+      call: () => http().get('/api/admin/integrations'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'PUT /api/admin/integrations/:id',
+      call: () => http().put('/api/admin/integrations/lms').send({}),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 400,
+    },
+    {
+      name: 'POST /api/admin/integrations/:id/token',
+      call: () => http().post('/api/admin/integrations/missing/token').send({ token: '12345678' }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'POST /api/admin/integrations/:id/operations/:op/test',
+      call: () => http().post('/api/admin/integrations/missing/operations/x/test').send({}),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 404,
+    },
+    {
+      name: 'GET /api/agents',
+      call: () => http().get('/api/agents'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'POST /api/agents/:id/run',
+      call: () => http().post('/api/agents/missing/run').send({}),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
       name: 'GET /api/admin/app-clients',
       call: () => http().get('/api/admin/app-clients'),
       allowed: ['super_admin', 'ai_admin', 'auditor'],

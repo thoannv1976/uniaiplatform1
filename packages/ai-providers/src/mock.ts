@@ -55,6 +55,14 @@ export class MockProvider implements LLMProvider {
       yield { type: 'error', ...failWith };
       return;
     }
+    // "[mock:tool=name {json}]": answer with exactly that tool call (agents, M18).
+    if (directives.toolCall) {
+      const call = directives.toolCall;
+      yield { type: 'text', delta: call };
+      yield usage(inputTokens, call);
+      yield { type: 'done', stopReason: 'end' };
+      return;
+    }
 
     let emitted = '';
     // "[mock:slow=N]": one chunk per second for N seconds, to test long streams (> 60 s).
@@ -118,12 +126,26 @@ const FAILURES: Record<
 export function parseMockDirectives(text: string): {
   slowSeconds: number;
   failWith?: (typeof FAILURES)[string];
+  /** "[mock:tool=lms.get_course {\"courseId\":\"KT101\"}]" → the JSON tool call to answer. */
+  toolCall?: string;
 } {
   const slow = /\[mock:slow=(\d{1,3})\]/.exec(text);
   const fail = /\[mock:fail=(\d{3})\]/.exec(text);
+  const tool = /\[mock:tool=([A-Za-z0-9_.-]+)\s*(\{[\s\S]*?\})?\]/.exec(text);
+  let toolCall: string | undefined;
+  if (tool) {
+    let args: unknown;
+    try {
+      args = tool[2] ? JSON.parse(tool[2]) : {};
+    } catch {
+      args = {};
+    }
+    toolCall = JSON.stringify({ tool: tool[1], arguments: args });
+  }
   return {
     slowSeconds: slow ? Math.min(Number(slow[1]), 900) : 0,
     failWith: fail ? FAILURES[fail[1] ?? ''] : undefined,
+    ...(toolCall ? { toolCall } : {}),
   };
 }
 

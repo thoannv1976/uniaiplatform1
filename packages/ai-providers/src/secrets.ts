@@ -22,6 +22,18 @@ export function secretNameFor(provider: ProviderId, databaseId = '(default)'): s
   return `${provider}-api-key${suffix}`;
 }
 
+/**
+ * Token of an integration (M18, ADR 0017), per Firestore database like the provider keys:
+ * "integration-lms-token" / "integration-lms-token-staging".
+ */
+export function integrationSecretName(integrationId: string, databaseId = '(default)'): string {
+  if (!/^[a-z][a-z0-9-]{1,29}$/.test(integrationId)) {
+    throw new Error(`Mã tích hợp không hợp lệ: ${integrationId}`);
+  }
+  const suffix = databaseId === '(default)' ? '' : `-${databaseId}`;
+  return `integration-${integrationId}-token${suffix}`;
+}
+
 export class SecretStoreError extends Error {
   constructor(
     message: string,
