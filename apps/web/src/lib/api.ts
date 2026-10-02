@@ -1,4 +1,10 @@
 import {
+  conversationDetailResponseSchema,
+  conversationListResponseSchema,
+  conversationSchema,
+  type Conversation,
+  type ConversationDetail,
+  type UpdateConversationRequest,
   chatModelListResponseSchema,
   createSseParser,
   type ChatModelOption,
@@ -284,4 +290,34 @@ export async function streamChat(
     parser.push(value);
   }
   parser.end();
+}
+
+export async function fetchConversations(idToken: string): Promise<Conversation[]> {
+  return conversationListResponseSchema.parse(await call('/api/conversations', idToken))
+    .conversations;
+}
+
+export async function fetchConversation(idToken: string, id: string): Promise<ConversationDetail> {
+  return conversationDetailResponseSchema.parse(
+    await call(`/api/conversations/${encodeURIComponent(id)}`, idToken),
+  );
+}
+
+export async function updateConversation(
+  idToken: string,
+  id: string,
+  patch: UpdateConversationRequest,
+): Promise<Conversation> {
+  const body = JSON.stringify(patch);
+  return conversationSchema.parse(
+    await call(`/api/conversations/${encodeURIComponent(id)}`, idToken, { method: 'PATCH', body }),
+  );
+}
+
+export async function deleteConversation(idToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/conversations/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) throw await readError(res);
 }

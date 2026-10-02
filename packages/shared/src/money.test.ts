@@ -54,5 +54,6 @@ describe('formatUsd', () => {
   it('uses two decimals for normal amounts', () => {
     expect(formatUsd(1_270_000)).toBe('$1.27');
     expect(formatUsd(0)).toBe('$0.00');
+    expect(formatUsd(42)).toBe('<$0.0001');
   });
 });

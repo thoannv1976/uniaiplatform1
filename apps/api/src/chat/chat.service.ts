@@ -72,7 +72,7 @@ export function buildMessages(
 /**
  * The AI Gateway's chat path (spec 5.2): route → resolve provider → store the turn →
  * stream SSE → settle the cost in the ledger, also when the user cancels.
- * Quota reservation (M7), DLP (M10) and fallback (M8) plug in around `stream`.
+ * Quota reservation (M7) and fallback (M10) plug in around `stream`; DLP comes in phase 2.
  */
 @Injectable()
 export class ChatService {
