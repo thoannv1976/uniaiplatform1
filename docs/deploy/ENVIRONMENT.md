@@ -2,7 +2,7 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M10 (Claude Code): `infra/hardening.sh` (PITR, backup hằng ngày 14 ngày, log bucket
+Cập nhật lần cuối: 02/10/2026 – M11 (Claude Code): `settings/router` (luật Smart Router, không cần hạ tầng). Trước đó – M10 (Claude Code): `infra/hardening.sh` (PITR, backup hằng ngày 14 ngày, log bucket
 `uniai-audit` + sink, cảnh báo lỗi > 5 %), `settings/killSwitch`, runbook vận hành và checklist go-live. Trước đó – M9 (Claude Code): bucket `gs://uniaiplatform1-uploads` (`infra/storage.sh`: CORS,
 vòng đời, quyền ký signed URL), biến `FILES_BUCKET`, bộ nhớ API 1 GiB, TTL `files.expireAt`. Trước đó – M8 (Claude Code): job `uniai-usage-aggregate-*` (5 phút, `infra/scheduler.sh`),
 index `usageTransactions (status, committedAt)` và `(uid, period, status)`; script tùy chọn `infra/billing-budget.sh`
@@ -48,6 +48,7 @@ Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 | `usageAggregates/{YYYYMM}`, `…/days/{d}` | Tổng chi phí theo nhà cung cấp/model/nhóm/đơn vị/ngày; `_checkpoint` (M8, ADR 0007)                | worker (`/jobs/usage-aggregate`)                     |
 | `notifications`, `alertStates/{key}`     | Thông báo trong ứng dụng; chống gửi trùng mỗi ngưỡng mỗi kỳ (M8)                                   | API, worker                                          |
 | `files/{id}`                             | Tệp đính kèm: tên, loại, kích thước, số trang, đường dẫn Storage; TTL 1 ngày (chờ) / 180 ngày (M9) | API (`/api/files`)                                   |
+| `settings/router`                        | Luật Smart Router, nhóm mặc định, tỷ lệ mục tiêu (M11, ADR 0010)                                   | AI Admin, Super Admin                                |
 | `settings/killSwitch`                    | Kill switch: tắt toàn bộ/nhà cung cấp/nhóm/model, lý do, phanh khẩn cấp (M10, ADR 0009)            | Super Admin, AI Admin; worker (phanh khẩn cấp)       |
 | `settings/app`                           | Tỷ giá hiển thị VND/USD (mặc định 26.000) (M8)                                                     | Super Admin (trang Thống kê)                         |
 

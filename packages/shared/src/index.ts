@@ -13,3 +13,4 @@ export * from './usage.js';
 export * from './files.js';
 export * from './terms.js';
 export * from './killswitch.js';
+export * from './router.js';

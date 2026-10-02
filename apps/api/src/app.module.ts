@@ -10,6 +10,7 @@ import {
   GcsBlobStore,
   getDb,
   KillSwitchStore,
+  RouterConfigStore,
   AlertService,
   QuotaService,
   RegistryStore,
@@ -51,6 +52,8 @@ import { BLOB_STORE, FILE_STORE, FilesService } from './files/files.service.js';
 import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
 import { CircuitBreaker } from './resilience/circuit-breaker.js';
+import { RouterController } from './router/router.controller.js';
+import { ROUTER_CONFIG_STORE, RouterService } from './router/router.service.js';
 import { KillSwitchController } from './resilience/kill-switch.controller.js';
 import { KILL_SWITCH_STORE, KillSwitchService } from './resilience/kill-switch.service.js';
 import { AdminQuotaController, MyQuotaController } from './quota/quota.controller.js';
@@ -96,6 +99,7 @@ export class AppModule {
         AdminUsageController,
         FilesController,
         KillSwitchController,
+        RouterController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -141,6 +145,8 @@ export class AppModule {
         FilesService,
         { provide: KILL_SWITCH_STORE, useFactory: () => new KillSwitchStore(getDb()) },
         KillSwitchService,
+        { provide: ROUTER_CONFIG_STORE, useFactory: () => new RouterConfigStore(getDb()) },
+        RouterService,
         { provide: CircuitBreaker, useFactory: () => new CircuitBreaker() },
         AuditService,
         { provide: APP_GUARD, useClass: AuthGuard },

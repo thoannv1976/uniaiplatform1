@@ -13,7 +13,9 @@ import {
   type KillSwitch,
   MODEL_TIER_LABELS_VI,
   MODEL_TIERS,
+  tierFallbackOrder,
   type ChatModelOption,
+  type RouteDecision,
   type ModelTier,
   type ModelView,
   type ProviderView,
@@ -36,9 +38,8 @@ const PREMIUM_ROLES: Role[] = ['super_admin', 'ai_admin'];
 const AUTO_TIERS: ModelTier[] = ['economy', 'standard', 'advanced'];
 
 /**
- * Chooses the model for a chat request. M5 keeps AUTO simple: the cheapest tier that has
- * a usable model, then the highest priority. The Smart Cost Router (spec 8.6) replaces
- * `auto()` later without changing callers.
+ * Chooses the model for a chat request. AUTO takes the Smart Router's decision (tier and
+ * reason, spec 8.6) and picks the best usable model of that tier, or of the nearest tier.
  */
 @Injectable()
 export class ModelRouter {
@@ -103,7 +104,7 @@ export class ModelRouter {
   async choose(
     requested: string,
     role: Role,
-    options: { excludePremium?: boolean; requireImage?: boolean } = {},
+    options: { excludePremium?: boolean; requireImage?: boolean; decision?: RouteDecision } = {},
   ): Promise<Route> {
     const [{ models, providers }, ks] = await Promise.all([
       this.cache.get(),
@@ -118,14 +119,22 @@ export class ModelRouter {
     }
 
     if (requested === CHAT_MODEL_AUTO) {
-      const tiers = options.excludePremium
+      const allowedTiers = options.excludePremium
         ? AUTO_TIERS.filter((t) => !isPremiumTier(t))
         : AUTO_TIERS;
-      const best = usable
-        .filter(({ model }) => tiers.includes(model.tier))
+      const candidates = usable
+        .filter(({ model }) => allowedTiers.includes(model.tier))
         .filter(({ model }) => !options.requireImage || readsImages(model))
-        .filter(({ model }) => this.open(model, ks))
-        .sort(ModelRouter.rank)[0];
+        .filter(({ model }) => this.open(model, ks));
+      // Smart Router: the classified tier first, then the nearest tiers (cheaper first).
+      const order: ModelTier[] = options.decision
+        ? tierFallbackOrder(options.decision.tier)
+        : [...AUTO_TIERS];
+      let best: (typeof candidates)[number] | undefined;
+      for (const tier of order) {
+        best = candidates.filter(({ model }) => model.tier === tier).sort(ModelRouter.rank)[0];
+        if (best) break;
+      }
       if (!best && ks.reason && (ks.providers.length || ks.models.length || ks.tiers.length)) {
         throw new ServiceUnavailableException(
           `Các model AI phù hợp đang tạm dừng. Lý do: ${ks.reason}`,
@@ -139,10 +148,15 @@ export class ModelRouter {
           'Chưa có model AI nào sẵn sàng. Vui lòng liên hệ quản trị viên.',
         );
       }
-      return {
-        ...best,
-        reason: `AUTO: nhóm ${MODEL_TIER_LABELS_VI[best.model.tier]}, ưu tiên cao nhất${options.requireImage ? ', đọc được ảnh' : ''}`,
-      };
+      const image = options.requireImage ? ', đọc được ảnh' : '';
+      const decision = options.decision;
+      let reason = decision
+        ? `${decision.reason}${image}`
+        : `AUTO: nhóm ${MODEL_TIER_LABELS_VI[best.model.tier]}, ưu tiên cao nhất${image}`;
+      if (decision && best.model.tier !== decision.tier) {
+        reason += ` (nhóm ${MODEL_TIER_LABELS_VI[decision.tier]} không có model sẵn sàng → nhóm ${MODEL_TIER_LABELS_VI[best.model.tier]})`;
+      }
+      return { ...best, reason };
     }
 
     const known = models.find((m) => m.id === requested);
