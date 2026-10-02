@@ -198,7 +198,9 @@ describe('POST /api/ai/chat', () => {
       message: expect.stringMatching(/quá tải/),
     });
     expect(events[2]).toMatchObject({ status: 'error', cost: null });
-    expect(await usage.listForUser('gv')).toEqual([]);
+    // The reservation was given back: nothing billed.
+    const ledger = await usage.listForUser('gv');
+    expect(ledger.map((l) => [l.status, l.totalCost])).toEqual([['released', 0]]);
   });
 
   it('settles a cancelled answer: partial text kept, cost recorded', async () => {

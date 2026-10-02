@@ -78,6 +78,26 @@ function setup(
       ]),
     ),
     streamChat: vi.fn(stream),
+    fetchMyQuota: vi.fn(() =>
+      Promise.resolve({
+        uid: 'gv',
+        period: '202610',
+        tierId: 'standard' as const,
+        limit: 2_000_000,
+        premiumLimit: 500_000,
+        used: 1_700_000,
+        premiumUsed: 0,
+        reserved: 0,
+        premiumReserved: 0,
+        departmentId: null,
+        departmentPath: [],
+        email: 'gv@ftu.edu.vn',
+        name: 'GV',
+        remaining: 300_000,
+        premiumRemaining: 500_000,
+        percentUsed: 85,
+      }),
+    ),
   };
   const ui = (path: string) =>
     render(
@@ -140,6 +160,9 @@ describe('ChatPage', () => {
     });
     ui('/');
     expect(await screen.findByText('Bạn cần hỗ trợ gì hôm nay?')).toBeInTheDocument();
+    expect(await screen.findByText('Định mức tháng: còn $0.30 / $2.00')).toHaveClass(
+      'text-amber-700',
+    );
     fireEvent.change(screen.getByLabelText('Tin nhắn'), { target: { value: 'Xin chào' } });
     fireEvent.keyDown(screen.getByLabelText('Tin nhắn'), { key: 'Enter' });
     expect(await screen.findByText('Chào', { selector: 'strong' })).toBeInTheDocument();

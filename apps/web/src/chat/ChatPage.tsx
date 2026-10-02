@@ -6,6 +6,7 @@ import {
   type ChatModelOption,
   type ChatStreamEvent,
   type Conversation,
+  type QuotaSummary,
 } from '@uniai/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -14,6 +15,7 @@ import {
   fetchChatModels,
   fetchConversation,
   fetchConversations,
+  fetchMyQuota,
   streamChat,
   updateConversation,
 } from '../lib/api';
@@ -26,6 +28,7 @@ export interface ChatApi {
   deleteConversation: typeof deleteConversation;
   fetchChatModels: typeof fetchChatModels;
   streamChat: typeof streamChat;
+  fetchMyQuota: typeof fetchMyQuota;
 }
 
 const defaultApi: ChatApi = {
@@ -35,6 +38,7 @@ const defaultApi: ChatApi = {
   deleteConversation,
   fetchChatModels,
   streamChat,
+  fetchMyQuota,
 };
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -82,6 +86,7 @@ export function ChatPage({
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [models, setModels] = useState<ChatModelOption[]>([]);
+  const [quota, setQuota] = useState<QuotaSummary | null>(null);
   const [model, setModel] = useState<string>(CHAT_MODEL_AUTO);
   /** Messages of the conversation `key` (null = a new conversation not stored yet). */
   const [view, setView] = useState<{ key: string | null; messages: ViewMessage[] }>({
@@ -105,7 +110,13 @@ export function ChatPage({
 
   const reloadList = useCallback(async () => {
     try {
-      setConversations(await api.fetchConversations(await getToken()));
+      const token = await getToken();
+      const [list, q] = await Promise.all([
+        api.fetchConversations(token),
+        api.fetchMyQuota(token).catch(() => null),
+      ]);
+      setConversations(list);
+      setQuota(q);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -114,11 +125,18 @@ export function ChatPage({
   useEffect(() => {
     let active = true;
     void getToken()
-      .then((t) => Promise.all([api.fetchConversations(t), api.fetchChatModels(t)]))
-      .then(([list, options]) => {
+      .then((t) =>
+        Promise.all([
+          api.fetchConversations(t),
+          api.fetchChatModels(t),
+          api.fetchMyQuota(t).catch(() => null),
+        ]),
+      )
+      .then(([list, options, q]) => {
         if (!active) return;
         setConversations(list);
         setModels(options);
+        setQuota(q);
       })
       .catch((err: unknown) => active && setError(errorMessage(err)));
     return () => {
@@ -345,6 +363,7 @@ export function ChatPage({
               ))}
             </select>
           </label>
+          {quota && <QuotaBadge quota={quota} />}
         </div>
 
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto" aria-live="polite">
@@ -553,5 +572,21 @@ function MessageView(props: {
         )}
       </footer>
     </article>
+  );
+}
+
+/** "Định mức tháng: còn $1.85 / $2.00" – amber from 80 %, red when used up. */
+function QuotaBadge({ quota }: { quota: QuotaSummary }) {
+  const left = Math.max(0, quota.remaining);
+  const color =
+    quota.percentUsed >= 100
+      ? 'text-red-700'
+      : quota.percentUsed >= 80
+        ? 'text-amber-700'
+        : 'text-slate-500';
+  return (
+    <span className={`ml-auto text-xs ${color}`} title={`Đã dùng ${quota.percentUsed}%`}>
+      Định mức tháng: còn {formatUsd(left)} / {formatUsd(quota.limit)}
+    </span>
   );
 }

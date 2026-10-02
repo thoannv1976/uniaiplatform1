@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   CHAT_MODEL_AUTO,
+  isPremiumTier,
   MODEL_TIER_LABELS_VI,
   MODEL_TIERS,
   type ChatModelOption,
@@ -83,13 +84,20 @@ export class ModelRouter {
       }));
   }
 
-  async choose(requested: string, role: Role): Promise<Route> {
+  async choose(
+    requested: string,
+    role: Role,
+    options: { excludePremium?: boolean } = {},
+  ): Promise<Route> {
     const { models, providers } = await this.cache.get();
     const usable = this.usable(models, providers);
 
     if (requested === CHAT_MODEL_AUTO) {
+      const tiers = options.excludePremium
+        ? AUTO_TIERS.filter((t) => !isPremiumTier(t))
+        : AUTO_TIERS;
       const best = usable
-        .filter(({ model }) => AUTO_TIERS.includes(model.tier))
+        .filter(({ model }) => tiers.includes(model.tier))
         .sort(ModelRouter.rank)[0];
       if (!best) {
         throw new ServiceUnavailableException(

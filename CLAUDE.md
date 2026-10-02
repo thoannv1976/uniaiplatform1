@@ -16,7 +16,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 
 - `apps/web` – React + Vite SPA → Firebase Hosting
 - `apps/api` – NestJS → Cloud Run `uniai-api` (cổng 8080)
-- `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081)
+- `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081); job `/jobs/*` do Cloud Scheduler gọi (`infra/scheduler.sh`)
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
   `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái)
@@ -48,7 +48,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   rewrite Hosting – giới hạn 60 giây). Mọi câu trả lời có token phải ghi `usageTransactions`, kể cả khi hủy (ADR 0005).
 - Hội thoại chỉ chủ sở hữu đọc được qua API; quản trị viên không xem nội dung hội thoại của người khác.
 - Tiền: số nguyên micro-USD, chỉ dùng `packages/shared/src/money.ts`. Không dùng số thực cho tiền.
-- Trừ định mức chỉ qua QuotaService (Firestore transaction); không ghi vào `budgetPeriods` theo từng yêu cầu.
+- Trừ định mức chỉ qua `QuotaService` (`packages/firestore/src/quota.ts`, reserve → commit/release trong transaction,
+  ADR 0006); không ghi vào `budgetPeriods` theo từng yêu cầu. Hết định mức → 402, quá nhanh → 429 + Retry-After.
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager
   (`<provider>-api-key[-staging]`, chọn theo database), Firestore chỉ giữ `last4` (ADR 0002).
 - Giá model là số nguyên micro-USD/1M token, chỉ thêm bản ghi giá mới (`models/{id}/prices`), không sửa giá cũ.
