@@ -12,17 +12,17 @@
     "test:emulator": "vitest run --config vitest.emulator.config.ts"
   },
   "dependencies": {
+    "@google-cloud/tasks": "^7.2.1",
     "@nestjs/common": "^12.1.2",
     "@nestjs/core": "^12.1.2",
     "@nestjs/platform-express": "^12.1.2",
     "@uniai/ai-providers": "workspace:*",
+    "@uniai/documents": "workspace:*",
     "@uniai/firestore": "workspace:*",
     "@uniai/shared": "workspace:*",
-    "fflate": "^0.8.3",
     "firebase-admin": "^14.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "unpdf": "^1.8.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {

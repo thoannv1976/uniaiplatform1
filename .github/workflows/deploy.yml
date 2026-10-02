@@ -109,6 +109,20 @@ jobs:
             docker push "${IMAGE_BASE}/${app}:${GITHUB_SHA}"
           done
 
+      - name: Deploy Cloud Run – worker (không công khai)
+        run: |
+          gcloud run deploy "uniai-worker${SUFFIX}" \
+            --image="${IMAGE_BASE}/worker:${GITHUB_SHA}" \
+            --region="$REGION" \
+            --service-account="uniai-worker@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --no-allow-unauthenticated \
+            --timeout=900 --min-instances=0 --max-instances=2 --memory=1Gi \
+            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};FILES_BUCKET=${PROJECT_ID}-uploads;EMBEDDING_LOCATION=${REGION}" \
+            --quiet
+          # The API queues Knowledge Base work to this worker (Cloud Tasks, M12).
+          WORKER_URL="$(gcloud run services describe "uniai-worker${SUFFIX}" --region="$REGION" --format='value(status.url)')"
+          echo "WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
+
       - name: Deploy Cloud Run – API
         env:
           # Break-glass admin emails outside @ftu.edu.vn (ADR 0004); empty = none.
@@ -124,18 +138,7 @@ jobs:
             --allow-unauthenticated \
             --timeout=900 --concurrency=80 --memory=1Gi \
             --min-instances=0 --max-instances="$MAX_INSTANCES" \
-            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS};VERTEX_LOCATION=global;ENABLE_MOCK_PROVIDER=${ENABLE_MOCK};FILES_BUCKET=${PROJECT_ID}-uploads" \
-            --quiet
-
-      - name: Deploy Cloud Run – worker (không công khai)
-        run: |
-          gcloud run deploy "uniai-worker${SUFFIX}" \
-            --image="${IMAGE_BASE}/worker:${GITHUB_SHA}" \
-            --region="$REGION" \
-            --service-account="uniai-worker@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --no-allow-unauthenticated \
-            --min-instances=0 --max-instances=2 --memory=512Mi \
-            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB}" \
+            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS};VERTEX_LOCATION=global;ENABLE_MOCK_PROVIDER=${ENABLE_MOCK};FILES_BUCKET=${PROJECT_ID}-uploads;EMBEDDING_LOCATION=${REGION};KB_TASKS_QUEUE=projects/${PROJECT_ID}/locations/${REGION}/queues/uniai-kb-ingest${SUFFIX};WORKER_URL=${WORKER_URL};TASKS_SA_EMAIL=uniai-scheduler@${PROJECT_ID}.iam.gserviceaccount.com" \
             --quiet
 
       - name: Build web với địa chỉ API vừa deploy

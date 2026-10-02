@@ -22,7 +22,7 @@ import {
 } from '@uniai/shared';
 import { AuditService } from '../audit/audit.service.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
-import { extract, FileContentError } from './extract.js';
+import { extract, FileContentError } from '@uniai/documents';
 
 export const FILE_STORE = Symbol('FILE_STORE');
 export const BLOB_STORE = Symbol('BLOB_STORE');

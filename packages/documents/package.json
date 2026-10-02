@@ -1,0 +1,29 @@
+{
+  "name": "@uniai/documents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@uniai/ai-providers": "workspace:*",
+    "@uniai/firestore": "workspace:*",
+    "@uniai/shared": "workspace:*",
+    "fflate": "^0.8.3",
+    "unpdf": "^1.8.1"
+  },
+  "files": [
+    "dist"
+  ]
+}

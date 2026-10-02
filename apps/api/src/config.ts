@@ -34,6 +34,12 @@ export interface AppConfig {
    * to the API, which writes to the Storage emulator (local development and tests).
    */
   fileUploadMode: 'signed' | 'proxy';
+  /** Knowledge Base (M12): Cloud Tasks queue to the worker, or inline when not configured. */
+  kbIngest:
+    | { mode: 'tasks'; queue: string; workerUrl: string; serviceAccount: string }
+    | { mode: 'inline' };
+  /** Embeddings: Vertex AI, or deterministic mock vectors (emulator, tests). */
+  embeddings: { mode: 'vertex'; location: string } | { mode: 'mock' };
 }
 
 export function emailPolicy(config: AppConfig): EmailPolicy {
@@ -75,6 +81,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : env.FIREBASE_STORAGE_EMULATOR_HOST || emulator
           ? 'proxy'
           : 'signed',
+    kbIngest:
+      env.KB_TASKS_QUEUE && env.WORKER_URL && env.TASKS_SA_EMAIL
+        ? {
+            mode: 'tasks',
+            queue: env.KB_TASKS_QUEUE,
+            workerUrl: env.WORKER_URL.replace(/\/$/, ''),
+            serviceAccount: env.TASKS_SA_EMAIL,
+          }
+        : { mode: 'inline' },
+    embeddings:
+      env.EMBEDDINGS === 'mock' || (emulator && env.EMBEDDINGS !== 'vertex')
+        ? { mode: 'mock' }
+        : { mode: 'vertex', location: env.EMBEDDING_LOCATION || 'asia-southeast1' },
   };
 }
 

@@ -1,4 +1,13 @@
 import {
+  createKbDocumentResponseSchema,
+  kbDocumentListResponseSchema,
+  kbDocumentSchema,
+  knowledgeBaseListResponseSchema,
+  knowledgeBaseSchema,
+  type CreateKnowledgeBaseRequest,
+  type KbDocument,
+  type KnowledgeBase,
+  type UpdateKnowledgeBaseRequest,
   routerTestResponseSchema,
   routerViewSchema,
   type RouterConfig,
@@ -547,4 +556,82 @@ export async function testRouter(
   return routerTestResponseSchema.parse(
     await call('/api/admin/router/test', idToken, { method: 'POST', body: JSON.stringify(input) }),
   );
+}
+
+// ---- M12: Knowledge Base ----
+
+export async function fetchKnowledgeBases(idToken: string): Promise<KnowledgeBase[]> {
+  return knowledgeBaseListResponseSchema.parse(await call('/api/admin/knowledge-bases', idToken))
+    .knowledgeBases;
+}
+
+export async function createKnowledgeBase(
+  idToken: string,
+  input: CreateKnowledgeBaseRequest,
+): Promise<KnowledgeBase> {
+  return knowledgeBaseSchema.parse(
+    await call('/api/admin/knowledge-bases', idToken, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function updateKnowledgeBase(
+  idToken: string,
+  id: string,
+  patch: UpdateKnowledgeBaseRequest,
+): Promise<KnowledgeBase> {
+  return knowledgeBaseSchema.parse(
+    await call(`/api/admin/knowledge-bases/${id}`, idToken, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  );
+}
+
+export async function fetchKbDocuments(idToken: string, kbId: string): Promise<KbDocument[]> {
+  return kbDocumentListResponseSchema.parse(
+    await call(`/api/admin/knowledge-bases/${kbId}/documents`, idToken),
+  ).documents;
+}
+
+/** Registers a document, uploads the file (signed URL) and queues it for processing. */
+export async function uploadKbDocument(
+  idToken: string,
+  kbId: string,
+  file: File,
+  meta: { title: string; effectiveDate: string | null; replacesDocumentId: string | null },
+): Promise<KbDocument> {
+  const created = createKbDocumentResponseSchema.parse(
+    await call(`/api/admin/knowledge-bases/${kbId}/documents`, idToken, {
+      method: 'POST',
+      body: JSON.stringify({ ...meta, fileName: file.name, mime: file.type, size: file.size }),
+    }),
+  );
+  const target = created.upload;
+  const headers = new Headers(target.headers);
+  if (target.withAuth) headers.set('Authorization', `Bearer ${idToken}`);
+  const url = target.url.startsWith('/') ? `${API_URL}${target.url}` : target.url;
+  const put = await fetch(url, { method: 'PUT', headers, body: file });
+  if (!put.ok) throw new ApiError(put.status, `Tải tệp lên không thành công (mã ${put.status}).`);
+  return kbDocumentSchema.parse(
+    await call(`/api/admin/kb-documents/${created.document.id}/complete`, idToken, {
+      method: 'POST',
+    }),
+  );
+}
+
+export async function retryKbDocument(idToken: string, id: string): Promise<KbDocument> {
+  return kbDocumentSchema.parse(
+    await call(`/api/admin/kb-documents/${id}/retry`, idToken, { method: 'POST' }),
+  );
+}
+
+export async function deleteKbDocument(idToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/admin/kb-documents/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) throw await readError(res);
 }

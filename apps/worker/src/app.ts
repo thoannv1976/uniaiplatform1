@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -10,7 +11,7 @@ import {
   type INestApplication,
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { HealthResponse } from '@uniai/shared';
+import { KB_MAX_PAGES, type HealthResponse } from '@uniai/shared';
 import type { WorkerConfig } from './config.js';
 
 const CONFIG = Symbol('WORKER_CONFIG');
@@ -22,6 +23,8 @@ export interface WorkerJobs {
   sweepReservations(now?: Date): Promise<number>;
   expireAdjustments(now?: Date): Promise<number>;
   aggregateUsage(now?: Date): Promise<{ period: string; added: number; alerts: number }>;
+  /** Knowledge Base (M12): extract, chunk, embed one document; throws to be retried. */
+  ingestKbDocument(documentId: string): Promise<{ status: string }>;
 }
 
 /**
@@ -70,6 +73,17 @@ class JobsController {
     return { released, reverted };
   }
 
+  /** Cloud Tasks (queue uniai-kb-ingest): one knowledge-base document per task. */
+  @Post('kb-ingest')
+  @HttpCode(200)
+  async ingest(@Body() body: { documentId?: unknown }) {
+    const documentId = typeof body?.documentId === 'string' ? body.documentId : '';
+    if (!/^[A-Za-z0-9]{1,64}$/.test(documentId)) return { status: 'invalid' };
+    const result = await this.jobs.ingestKbDocument(documentId);
+    this.logger.log(JSON.stringify({ job: 'kb-ingest', documentId, ...result }));
+    return result;
+  }
+
   /** Every 5 minutes: fold the ledger into dashboard totals, update budgets, raise alerts. */
   @Post('usage-aggregate')
   @HttpCode(200)
@@ -93,14 +107,37 @@ export async function createWorker(
         // Firestore is only loaded when the worker really runs the jobs.
         useFactory: async (): Promise<WorkerJobs> => {
           if (options.jobs) return options.jobs;
-          const { getDb, QuotaService, runUsageJob } = await import('@uniai/firestore');
+          const { getDb, GcsBlobStore, KnowledgeStore, QuotaService, runUsageJob } =
+            await import('@uniai/firestore');
           const db = getDb();
           const quota = new QuotaService(db);
+          const env =
+            (process.env.FIRESTORE_DATABASE_ID ?? '(default)') === '(default)'
+              ? 'production'
+              : 'staging';
           return {
             rollover: (now) => quota.rollover(now),
             sweepReservations: (now) => quota.sweepReservations(now),
             expireAdjustments: (now) => quota.expireAdjustments(now),
             aggregateUsage: (now) => runUsageJob(db, now),
+            ingestKbDocument: async (documentId) => {
+              const [{ ingestDocument }, { VertexEmbedder, MockEmbedder }] = await Promise.all([
+                import('@uniai/documents'),
+                import('@uniai/ai-providers'),
+              ]);
+              const embedder = config.gcpProject
+                ? new VertexEmbedder(config.gcpProject, config.embeddingLocation)
+                : new MockEmbedder();
+              return ingestDocument(
+                {
+                  store: new KnowledgeStore(db, env),
+                  blobs: new GcsBlobStore(config.filesBucket),
+                  embedder,
+                  maxPages: KB_MAX_PAGES,
+                },
+                documentId,
+              );
+            },
           };
         },
       },

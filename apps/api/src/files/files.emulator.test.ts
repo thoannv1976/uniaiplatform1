@@ -10,7 +10,7 @@ import {
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { audit, givenUser, resetData, startApp, tokenFor } from '../test/harness.js';
-import { SAMPLE_PNG, sampleDocx, samplePdf, sampleXlsx } from './fixtures.js';
+import { SAMPLE_PNG, sampleDocx, samplePdf, sampleXlsx } from '@uniai/documents';
 
 let app: INestApplication;
 let requests: NormalizedChatRequest[];

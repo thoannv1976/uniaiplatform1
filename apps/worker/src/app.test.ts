@@ -16,6 +16,7 @@ const jobs: WorkerJobs = {
     calls.push('aggregate'),
     Promise.resolve({ period: '202610', added: 5, alerts: 1 })
   ),
+  ingestKbDocument: (id) => (calls.push(`ingest:${id}`), Promise.resolve({ status: 'ready' })),
 };
 
 beforeAll(async () => {
@@ -55,6 +56,13 @@ describe('worker', () => {
       added: 5,
       alerts: 1,
     });
-    expect(calls).toEqual(['rollover', 'sweep', 'expire', 'aggregate']);
+    expect(
+      (await request(server).post('/jobs/kb-ingest').send({ documentId: 'abc123' }).expect(200))
+        .body,
+    ).toEqual({ status: 'ready' });
+    expect(
+      (await request(server).post('/jobs/kb-ingest').send({ documentId: '../x' })).body,
+    ).toEqual({ status: 'invalid' });
+    expect(calls).toEqual(['rollover', 'sweep', 'expire', 'aggregate', 'ingest:abc123']);
   });
 });

@@ -1,7 +1,15 @@
 import { Module, type DynamicModule, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { GcpSecretStore, MemorySecretStore, type SecretStore } from '@uniai/ai-providers';
+import {
+  GcpSecretStore,
+  MemorySecretStore,
+  MockEmbedder,
+  VertexEmbedder,
+  type Embedder,
+  type SecretStore,
+} from '@uniai/ai-providers';
 import type { BlobStore } from '@uniai/firestore';
+import { KB_MAX_PAGES } from '@uniai/shared';
 import {
   AuditStore,
   ConversationStore,
@@ -10,6 +18,7 @@ import {
   GcsBlobStore,
   getDb,
   KillSwitchStore,
+  KnowledgeStore,
   RouterConfigStore,
   AlertService,
   QuotaService,
@@ -48,6 +57,9 @@ import { APP_CONFIG, type AppConfig } from './config.js';
 import { DEPARTMENT_STORE, DepartmentsController } from './departments/departments.controller.js';
 import { DirectoryController } from './directory/directory.controller.js';
 import { FilesController } from './files/files.controller.js';
+import { CloudTasksIngestQueue, InlineIngestQueue } from './knowledge/ingest-queue.js';
+import { KnowledgeController } from './knowledge/knowledge.controller.js';
+import { EMBEDDER, INGEST_QUEUE, KNOWLEDGE_STORE, type IngestQueue } from './knowledge/tokens.js';
 import { BLOB_STORE, FILE_STORE, FilesService } from './files/files.service.js';
 import { HealthController } from './health/health.controller.js';
 import { MeController } from './me/me.controller.js';
@@ -72,6 +84,8 @@ export interface AppOverrides {
   providerFactory?: ProviderFactory;
   /** Replaces Cloud Storage, for tests. */
   blobStore?: BlobStore;
+  /** Replaces Vertex AI embeddings, for tests. */
+  embedder?: Embedder;
   /** Extra controllers, for tests of the guard itself. */
   extraControllers?: Type[];
 }
@@ -100,6 +114,7 @@ export class AppModule {
         FilesController,
         KillSwitchController,
         RouterController,
+        KnowledgeController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -143,6 +158,30 @@ export class AppModule {
           useFactory: (): BlobStore => overrides.blobStore ?? new GcsBlobStore(config.filesBucket),
         },
         FilesService,
+        {
+          provide: KNOWLEDGE_STORE,
+          useFactory: () => new KnowledgeStore(getDb(), config.filesEnv),
+        },
+        {
+          provide: EMBEDDER,
+          useFactory: (): Embedder =>
+            overrides.embedder ??
+            (config.embeddings.mode === 'vertex' && config.gcpProject
+              ? new VertexEmbedder(config.gcpProject, config.embeddings.location)
+              : new MockEmbedder()),
+        },
+        {
+          provide: INGEST_QUEUE,
+          inject: [KNOWLEDGE_STORE, BLOB_STORE, EMBEDDER],
+          useFactory: (store: KnowledgeStore, blobs: BlobStore, embedder: Embedder): IngestQueue =>
+            config.kbIngest.mode === 'tasks'
+              ? new CloudTasksIngestQueue(
+                  config.kbIngest.queue,
+                  config.kbIngest.workerUrl,
+                  config.kbIngest.serviceAccount,
+                )
+              : new InlineIngestQueue({ store, blobs, embedder, maxPages: KB_MAX_PAGES }),
+        },
         { provide: KILL_SWITCH_STORE, useFactory: () => new KillSwitchStore(getDb()) },
         KillSwitchService,
         { provide: ROUTER_CONFIG_STORE, useFactory: () => new RouterConfigStore(getDb()) },

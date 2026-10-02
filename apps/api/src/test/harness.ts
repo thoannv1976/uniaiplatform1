@@ -67,6 +67,7 @@ export async function startApp(
       // Uploads go through the API into the Storage emulator, as in local development.
       FILE_UPLOAD_MODE: 'proxy',
       FILES_BUCKET: 'demo-uniai.appspot.com',
+      EMBEDDINGS: 'mock',
       ...env,
     }),
     {
