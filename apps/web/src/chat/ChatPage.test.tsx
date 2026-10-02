@@ -14,6 +14,7 @@ const conv = (id: string, title: string, over: Partial<Conversation> = {}): Conv
   updatedAt: '2026-10-01T00:00:00.000Z',
   expireAt: null,
   knowledgeBaseIds: [],
+  projectId: null,
   ...over,
 });
 
@@ -83,6 +84,36 @@ function setup(
       ]),
     ),
     streamChat: vi.fn(stream),
+    fetchPrompts: vi.fn(() =>
+      Promise.resolve([
+        {
+          id: 'p1',
+          title: 'Đề cương môn học',
+          description: '',
+          body: 'Soạn đề cương môn {{tên môn}}',
+          category: 'giang-day' as const,
+          variables: ['tên môn'],
+          visibility: 'shared' as const,
+          publishedTo: [],
+          ownerUid: 'ai',
+          editable: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ]),
+    ),
+    fetchProjects: vi.fn(() =>
+      Promise.resolve([
+        {
+          id: 'pr1',
+          name: 'Đề cương 2027',
+          instructions: '',
+          fileIds: [],
+          createdAt: '',
+          updatedAt: '',
+        },
+      ]),
+    ),
     fetchChatKnowledgeBases: vi.fn(() =>
       Promise.resolve([{ id: 'kb1', name: 'Quy chế đào tạo', description: '', documentCount: 3 }]),
     ),
@@ -284,6 +315,27 @@ describe('ChatPage', () => {
     expect(sources).toHaveTextContent('phiên bản 2, hiệu lực 01/09/2026, trang 3');
     // The new conversation keeps the selection.
     expect(screen.getByText('📚 Kho tri thức (1)')).toBeInTheDocument();
+  });
+
+  it('fills a library prompt and starts conversations in the chosen project', async () => {
+    const { ui } = setup((_t, req, onEvent) => {
+      expect(req).toEqual({
+        message: 'Soạn đề cương môn Kinh tế vĩ mô',
+        model: 'auto',
+        projectId: 'pr1',
+      });
+      onEvent(META);
+      return Promise.resolve();
+    });
+    ui('/?du-an=pr1');
+    expect(await screen.findByText(/Hội thoại mới trong dự án/)).toHaveTextContent('Đề cương 2027');
+    fireEvent.click(screen.getByText('📝 Prompt'));
+    fireEvent.click(screen.getByText('Đề cương môn học'));
+    fireEvent.change(screen.getByLabelText('tên môn'), { target: { value: 'Kinh tế vĩ mô' } });
+    fireEvent.click(screen.getByText('Chèn vào ô tin nhắn'));
+    expect(screen.getByLabelText('Tin nhắn')).toHaveValue('Soạn đề cương môn Kinh tế vĩ mô');
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi' }));
+    await vi.waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/hoi-thoai/c1'));
   });
 
   it('shows the files of stored messages', async () => {

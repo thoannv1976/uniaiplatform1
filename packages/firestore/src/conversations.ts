@@ -32,6 +32,7 @@ function toConversation(snap: DocumentSnapshot): Conversation {
     updatedAt: iso(d.updatedAt) ?? new Date(0).toISOString(),
     expireAt: iso(d.expireAt),
     knowledgeBaseIds: Array.isArray(d.knowledgeBaseIds) ? d.knowledgeBaseIds : [],
+    projectId: d.projectId ?? null,
   };
 }
 
@@ -77,6 +78,8 @@ export interface StartTurnInput {
   attachments?: AttachmentRef[];
   /** Knowledge bases searched for this turn (kept on the conversation). */
   knowledgeBaseIds?: string[];
+  /** Project of a new conversation (M14). */
+  projectId?: string | null;
   modelId: string;
   providerId: ProviderId;
   /** Content is deleted automatically this many days after it was written (decision D8). */
@@ -137,12 +140,18 @@ export class ConversationStore {
     return snap.docs.map(toConversation);
   }
 
-  async create(ownerUid: string, title: string, retentionDays: number): Promise<Conversation> {
+  async create(
+    ownerUid: string,
+    title: string,
+    retentionDays: number,
+    projectId: string | null = null,
+  ): Promise<Conversation> {
     const now = Timestamp.now();
     const ref = this.col().doc();
     await ref.create({
       ownerUid,
       title,
+      projectId,
       pinned: false,
       lastModelId: null,
       messageCount: 0,
@@ -226,6 +235,7 @@ export class ConversationStore {
           ownerUid: input.ownerUid,
           title: titleFromMessage(input.userText),
           pinned: false,
+          projectId: input.projectId ?? null,
           knowledgeBaseIds: input.knowledgeBaseIds ?? [],
           lastModelId: input.modelId,
           messageCount: 2,

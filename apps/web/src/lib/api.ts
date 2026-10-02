@@ -1,4 +1,15 @@
 import {
+  fileViewSchema as fileSchema,
+  projectListResponseSchema,
+  projectSchema,
+  promptListResponseSchema,
+  promptSchema,
+  type CreateProjectRequest,
+  type CreatePromptRequest,
+  type Project,
+  type Prompt,
+  type UpdateProjectRequest,
+  type UpdatePromptRequest,
   chatKnowledgeBaseListResponseSchema,
   type ChatKnowledgeBase,
   createKbDocumentResponseSchema,
@@ -643,4 +654,74 @@ export async function deleteKbDocument(idToken: string, id: string): Promise<voi
 export async function fetchChatKnowledgeBases(idToken: string): Promise<ChatKnowledgeBase[]> {
   return chatKnowledgeBaseListResponseSchema.parse(await call('/api/knowledge-bases', idToken))
     .knowledgeBases;
+}
+
+// ---- M14: workspace ----
+
+export async function fetchPrompts(idToken: string): Promise<Prompt[]> {
+  return promptListResponseSchema.parse(await call('/api/prompts', idToken)).prompts;
+}
+
+export async function createPrompt(idToken: string, input: CreatePromptRequest): Promise<Prompt> {
+  return promptSchema.parse(
+    await call('/api/prompts', idToken, { method: 'POST', body: JSON.stringify(input) }),
+  );
+}
+
+export async function updatePrompt(
+  idToken: string,
+  id: string,
+  patch: UpdatePromptRequest,
+): Promise<Prompt> {
+  return promptSchema.parse(
+    await call(`/api/prompts/${id}`, idToken, { method: 'PATCH', body: JSON.stringify(patch) }),
+  );
+}
+
+async function remove(path: string, idToken: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) throw await readError(res);
+}
+
+export async function deletePrompt(idToken: string, id: string): Promise<void> {
+  await remove(`/api/prompts/${id}`, idToken);
+}
+
+export async function fetchProjects(idToken: string): Promise<Project[]> {
+  return projectListResponseSchema.parse(await call('/api/projects', idToken)).projects;
+}
+
+export async function createProject(
+  idToken: string,
+  input: CreateProjectRequest,
+): Promise<Project> {
+  return projectSchema.parse(
+    await call('/api/projects', idToken, { method: 'POST', body: JSON.stringify(input) }),
+  );
+}
+
+export async function updateProject(
+  idToken: string,
+  id: string,
+  patch: UpdateProjectRequest,
+): Promise<Project> {
+  return projectSchema.parse(
+    await call(`/api/projects/${id}`, idToken, { method: 'PATCH', body: JSON.stringify(patch) }),
+  );
+}
+
+export async function deleteProject(idToken: string, id: string): Promise<void> {
+  await remove(`/api/projects/${id}`, idToken);
+}
+
+export async function fetchMyFiles(idToken: string): Promise<FileView[]> {
+  const raw = (await call('/api/files', idToken)) as { files: unknown[] };
+  return raw.files.map((f) => fileSchema.parse(f));
+}
+
+export async function deleteFile(idToken: string, id: string): Promise<void> {
+  await remove(`/api/files/${id}`, idToken);
 }

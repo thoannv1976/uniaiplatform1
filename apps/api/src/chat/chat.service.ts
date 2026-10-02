@@ -16,6 +16,7 @@ import {
   type AlertService,
   type ConversationStore,
   type HistoryMessage,
+  type ProjectStore,
   type QuotaService,
   type Reservation,
 } from '@uniai/firestore';
@@ -42,6 +43,7 @@ import { APP_CONFIG, type AppConfig } from '../config.js';
 import { AuditService } from '../audit/audit.service.js';
 import { FilesService, type LoadedAttachment } from '../files/files.service.js';
 import { KnowledgeRetrieval } from '../knowledge/retrieval.service.js';
+import { PROJECT_STORE } from '../workspace/tokens.js';
 import { CircuitBreaker } from '../resilience/circuit-breaker.js';
 import { RouterService } from '../router/router.service.js';
 import { ALERTS } from '../usage/tokens.js';
@@ -78,6 +80,7 @@ export function buildMessages(
   history: Turn[],
   message: string | Omit<Turn, 'role'>,
   budgetChars: number,
+  system: string = DEFAULT_SYSTEM_PROMPT,
 ): ProviderMessage[] {
   const next: Turn =
     typeof message === 'string' ? { role: 'user', content: message } : { role: 'user', ...message };
@@ -100,7 +103,7 @@ export function buildMessages(
     } else merged.push({ ...m });
   }
   return [
-    { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+    { role: 'system', content: system },
     ...merged.map((m) => (m.images?.length ? m : { role: m.role, content: m.content })),
   ];
 }
@@ -148,6 +151,21 @@ export function withAttachments(
     content: `${blocks.join('\n\n')}\n\n${text}`,
     ...(images.length ? { images } : {}),
   };
+}
+
+/** System prompt of a conversation in a project: instructions and project files (M14). */
+export function projectSystemPrompt(
+  project: { name: string; instructions: string },
+  files: LoadedAttachment[],
+  capChars: number,
+): string {
+  const parts = [DEFAULT_SYSTEM_PROMPT, `Bạn đang làm việc trong dự án "${project.name}".`];
+  if (project.instructions) parts.push(`Chỉ dẫn của dự án:\n${project.instructions}`);
+  const docs = files.filter((f) => f.text !== null);
+  if (docs.length) {
+    parts.push(`Tài liệu của dự án:\n${withAttachments('', docs, capChars, false).content.trim()}`);
+  }
+  return parts.join('\n\n');
 }
 
 /** Conservative input estimate: about 3 characters per token, plus per-message overhead. */
@@ -200,6 +218,7 @@ export class ChatService {
     private readonly audit: AuditService,
     private readonly smartRouter: RouterService,
     private readonly retrieval: KnowledgeRetrieval,
+    @Inject(PROJECT_STORE) private readonly projects: ProjectStore,
   ) {}
 
   private async resolve(route: Route): Promise<LLMProvider> {
@@ -311,6 +330,17 @@ export class ChatService {
       ? await this.conversations.history(req.conversationId, user.uid)
       : [];
     if (!history) throw new NotFoundException('Không tìm thấy hội thoại.');
+    // Project (M14): instructions and files of the conversation's project.
+    const projectId = req.conversationId
+      ? ((await this.conversations.get(req.conversationId, user.uid))?.projectId ?? null)
+      : (req.projectId ?? null);
+    const project = projectId ? await this.projects.get(projectId, user.uid) : null;
+    if (projectId && !project && !req.conversationId) {
+      throw new NotFoundException('Không tìm thấy dự án.');
+    }
+    const projectFiles = project?.fileIds.length
+      ? await this.files.forProject(user.uid, project.fileIds)
+      : [];
     const attached = req.fileIds?.length ? await this.files.forMessage(user.uid, req.fileIds) : [];
     // RAG (M13): passages from the selected knowledge bases go before the question.
     const rag = req.knowledgeBaseIds?.length
@@ -327,7 +357,10 @@ export class ChatService {
         ...withAttachments(m.content, earlier(m), Math.floor(budget / 4), vision),
       }));
       const next = withAttachments(question, attached, budget - question.length, vision);
-      return buildMessages(turns, next, budget);
+      const system = project
+        ? projectSystemPrompt(project, projectFiles, Math.floor(budget / 4))
+        : DEFAULT_SYSTEM_PROMPT;
+      return buildMessages(turns, next, budget, system);
     };
     const requireImage = attached.some((f) => f.image !== null);
     const first = await this.reserve(user, req, build, {
@@ -347,6 +380,7 @@ export class ChatService {
         userText: req.message,
         attachments: attached.map((f) => f.ref),
         ...(req.knowledgeBaseIds ? { knowledgeBaseIds: req.knowledgeBaseIds } : {}),
+        projectId: project?.id ?? null,
         modelId: first.route.model.id,
         providerId: first.route.model.providerId,
         retentionDays: this.config.conversationRetentionDays,

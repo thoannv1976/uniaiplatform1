@@ -36,6 +36,13 @@ function idOr404(raw: string): string {
 export class FilesController {
   constructor(private readonly files: FilesService) {}
 
+  /** My Files (spec 8.10): the caller's processed files. */
+  @Get()
+  @AnyRole()
+  async list(@CurrentAuth() auth: AuthContext): Promise<{ files: FileView[] }> {
+    return { files: await this.files.list(auth.profile.uid) };
+  }
+
   /** Registers an upload and returns where the browser should PUT the file. */
   @Post()
   @AnyRole()

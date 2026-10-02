@@ -18,6 +18,7 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { DashboardPage } from './usage/DashboardPage';
 import { MyUsagePage } from './usage/MyUsagePage';
 import { NotificationBell } from './usage/NotificationBell';
+import { WorkspacePage } from './workspace/WorkspacePage';
 import { ROLE_LABELS_VI, TERMS_VERSION } from '@uniai/shared';
 
 // Markdown, math and code highlighting are only loaded once someone opens the chat.
@@ -43,6 +44,7 @@ export const ADMIN_PATHS = {
   knowledge: '/quan-tri/kho-tri-thuc',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
+export const WORKSPACE_PATH = '/khong-gian';
 
 /** First admin page a role may open. */
 function adminHome(role: Role): string {
@@ -68,6 +70,9 @@ function Home() {
           <span>
             {profile.profile.name ?? profile.profile.email} · {ROLE_LABELS_VI[role]}
           </span>
+          <Link to={WORKSPACE_PATH} className="text-sky-800 underline">
+            Không gian làm việc
+          </Link>
           <Link to={MY_USAGE_PATH} className="text-sky-800 underline">
             Mức sử dụng
           </Link>
@@ -200,6 +205,22 @@ function MyUsageRoute() {
         ← Trang chủ
       </Link>
       <MyUsagePage getToken={getToken} />
+    </>
+  );
+}
+
+function WorkspaceRoute() {
+  const { profile, getToken } = useAuth();
+  if (profile.kind === 'loading') return <p>Đang tải…</p>;
+  if (profile.kind !== 'ok' || profile.profile.status !== 'active') {
+    return <Navigate to="/" replace />;
+  }
+  return (
+    <>
+      <Link to="/" className="text-sm text-sky-800 underline">
+        ← Trang chủ
+      </Link>
+      <WorkspacePage role={profile.profile.role} getToken={getToken} />
     </>
   );
 }
@@ -356,6 +377,7 @@ export function App() {
             <Route path="/" element={<Home />} />
             <Route path="/hoi-thoai/:conversationId" element={<Home />} />
             <Route path={MY_USAGE_PATH} element={<MyUsageRoute />} />
+            <Route path={WORKSPACE_PATH} element={<WorkspaceRoute />} />
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

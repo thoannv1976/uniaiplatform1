@@ -485,6 +485,57 @@ describe('role matrix', () => {
       allowed: [...ROLES],
     },
     {
+      name: 'GET /api/prompts',
+      call: () => http().get('/api/prompts'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'POST /api/prompts',
+      call: () => http().post('/api/prompts').send({ title: 'T', body: 'B' }),
+      allowed: [...ROLES],
+      ok: 201,
+    },
+    {
+      name: 'PATCH /api/prompts/:id',
+      call: () => http().patch('/api/prompts/missing').send({ title: 'T' }),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'DELETE /api/prompts/:id',
+      call: () => http().delete('/api/prompts/missing'),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'GET /api/projects',
+      call: () => http().get('/api/projects'),
+      allowed: [...ROLES],
+    },
+    {
+      name: 'POST /api/projects',
+      call: () => http().post('/api/projects').send({ name: 'P' }),
+      allowed: [...ROLES],
+      ok: 201,
+    },
+    {
+      name: 'PATCH /api/projects/:id',
+      call: () => http().patch('/api/projects/missing').send({ name: 'P' }),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'DELETE /api/projects/:id',
+      call: () => http().delete('/api/projects/missing'),
+      allowed: [...ROLES],
+      ok: 404,
+    },
+    {
+      name: 'GET /api/files',
+      call: () => http().get('/api/files'),
+      allowed: [...ROLES],
+    },
+    {
       name: 'POST /api/admin/models/:id/test',
       call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
       allowed: ['super_admin', 'ai_admin'],

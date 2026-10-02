@@ -19,6 +19,8 @@ import {
   getDb,
   KillSwitchStore,
   KnowledgeStore,
+  ProjectStore,
+  PromptStore,
   RouterConfigStore,
   AlertService,
   QuotaService,
@@ -61,6 +63,9 @@ import { CloudTasksIngestQueue, InlineIngestQueue } from './knowledge/ingest-que
 import { KnowledgeChatController } from './knowledge/knowledge-chat.controller.js';
 import { KnowledgeController } from './knowledge/knowledge.controller.js';
 import { KnowledgeRetrieval } from './knowledge/retrieval.service.js';
+import { ProjectsController } from './workspace/projects.controller.js';
+import { PromptsController } from './workspace/prompts.controller.js';
+import { PROJECT_STORE, PROMPT_STORE } from './workspace/tokens.js';
 import { EMBEDDER, INGEST_QUEUE, KNOWLEDGE_STORE, type IngestQueue } from './knowledge/tokens.js';
 import { BLOB_STORE, FILE_STORE, FilesService } from './files/files.service.js';
 import { HealthController } from './health/health.controller.js';
@@ -118,6 +123,8 @@ export class AppModule {
         RouterController,
         KnowledgeController,
         KnowledgeChatController,
+        PromptsController,
+        ProjectsController,
         ...(overrides.extraControllers ?? []),
       ],
       providers: [
@@ -174,6 +181,8 @@ export class AppModule {
               : new MockEmbedder()),
         },
         KnowledgeRetrieval,
+        { provide: PROMPT_STORE, useFactory: () => new PromptStore(getDb()) },
+        { provide: PROJECT_STORE, useFactory: () => new ProjectStore(getDb()) },
         {
           provide: INGEST_QUEUE,
           inject: [KNOWLEDGE_STORE, BLOB_STORE, EMBEDDER],

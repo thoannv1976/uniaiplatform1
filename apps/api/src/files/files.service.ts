@@ -111,6 +111,16 @@ export class FilesService {
     return record;
   }
 
+  async list(uid: string): Promise<FileView[]> {
+    return (await this.files.listReady(uid)).map(toFileView);
+  }
+
+  /** A project's files that still exist (gone ones are left out). */
+  async forProject(uid: string, ids: string[]): Promise<LoadedAttachment[]> {
+    const records = await this.files.getMany([...new Set(ids)], uid);
+    return Promise.all(records.filter((r) => r.status === 'ready').map((r) => this.load(r)));
+  }
+
   async get(uid: string, id: string): Promise<FileView> {
     return toFileView(await this.own(uid, id));
   }

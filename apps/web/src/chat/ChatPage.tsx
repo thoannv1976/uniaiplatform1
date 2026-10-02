@@ -6,18 +6,23 @@ import {
   type AttachmentRef,
   type ChatKnowledgeBase,
   type ChatMessage,
+  type Project,
+  type Prompt,
   type ChatModelOption,
   type ChatStreamEvent,
   type Conversation,
   type QuotaSummary,
 } from '@uniai/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { PromptPicker } from '../workspace/PromptPicker';
 import {
   deleteConversation,
   fetchChatKnowledgeBases,
   fetchChatModels,
   fetchConversation,
+  fetchProjects,
+  fetchPrompts,
   fetchConversations,
   fetchMyQuota,
   streamChat,
@@ -38,6 +43,8 @@ export interface ChatApi {
   fetchMyQuota: typeof fetchMyQuota;
   uploadFile: typeof uploadFile;
   fetchChatKnowledgeBases: typeof fetchChatKnowledgeBases;
+  fetchPrompts: typeof fetchPrompts;
+  fetchProjects: typeof fetchProjects;
 }
 
 const defaultApi: ChatApi = {
@@ -50,6 +57,8 @@ const defaultApi: ChatApi = {
   fetchMyQuota,
   uploadFile,
   fetchChatKnowledgeBases,
+  fetchPrompts,
+  fetchProjects,
 };
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -123,6 +132,11 @@ export function ChatPage({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [bases, setBases] = useState<ChatKnowledgeBase[]>([]);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  /** Project filter of the sidebar; new conversations start in it (M14). */
+  const projectFilter = searchParams.get('du-an');
   /** Knowledge bases searched, per conversation (null key = new conversation). */
   const [kbSelection, setKbSelection] = useState<{ key: string | null; ids: string[] }>({
     key: null,
@@ -165,14 +179,18 @@ export function ChatPage({
           api.fetchChatModels(t),
           api.fetchMyQuota(t).catch(() => null),
           api.fetchChatKnowledgeBases(t).catch(() => []),
+          api.fetchPrompts(t).catch(() => []),
+          api.fetchProjects(t).catch(() => []),
         ]),
       )
-      .then(([list, options, q, kbs]) => {
+      .then(([list, options, q, kbs, ps, prs]) => {
         if (!active) return;
         setConversations(list);
         setModels(options);
         setQuota(q);
         setBases(kbs);
+        setPrompts(ps);
+        setProjects(prs);
       })
       .catch((err: unknown) => active && setError(errorMessage(err)));
     return () => {
@@ -323,6 +341,7 @@ export function ChatPage({
           ...(conversationId ? { conversationId } : {}),
           ...(attachments.length ? { fileIds: attachments.map((a) => a.id) } : {}),
           ...(selectedBases.length ? { knowledgeBaseIds: selectedBases } : {}),
+          ...(!conversationId && projectFilter ? { projectId: projectFilter } : {}),
         },
         (e) => {
           if (e.type === 'meta') started = true;
@@ -364,7 +383,11 @@ export function ChatPage({
     }
   }
 
-  const visible = sortAndFilter(conversations, search);
+  const visible = sortAndFilter(
+    projectFilter ? conversations.filter((c) => c.projectId === projectFilter) : conversations,
+    search,
+  );
+  const currentProject = projects.find((p) => p.id === projectFilter) ?? null;
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
 
   return (
@@ -378,11 +401,30 @@ export function ChatPage({
           className="rounded bg-sky-800 px-3 py-2 text-sm text-white"
           onClick={() => {
             setSidebarOpen(false);
-            void navigate('/');
+            void navigate(projectFilter ? `/?du-an=${projectFilter}` : '/');
           }}
         >
           + Hội thoại mới
         </button>
+        {projects.length > 0 && (
+          <select
+            aria-label="Dự án"
+            className="rounded border border-slate-300 px-2 py-1 text-sm"
+            value={projectFilter ?? ''}
+            onChange={(e) => {
+              if (e.target.value) setSearchParams({ 'du-an': e.target.value });
+              else setSearchParams({});
+              if (conversationId) void navigate(e.target.value ? `/?du-an=${e.target.value}` : '/');
+            }}
+          >
+            <option value="">Tất cả hội thoại</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                Dự án: {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           type="search"
           aria-label="Tìm hội thoại"
@@ -479,12 +521,25 @@ export function ChatPage({
           </p>
         )}
 
-        <KnowledgePicker
-          options={bases}
-          selected={selectedBases}
-          disabled={busy}
-          onChange={(ids) => setKbSelection({ key: conversationId ?? null, ids })}
-        />
+        {!conversationId && currentProject && (
+          <p className="text-xs text-slate-600">
+            Hội thoại mới trong dự án <strong>{currentProject.name}</strong> (dùng chỉ dẫn và tệp
+            của dự án).
+          </p>
+        )}
+        <div className="flex flex-wrap items-start gap-2 text-sm">
+          <PromptPicker
+            prompts={prompts}
+            disabled={busy}
+            onInsert={(text) => setInput((v) => (v ? `${v}\n${text}` : text))}
+          />
+          <KnowledgePicker
+            options={bases}
+            selected={selectedBases}
+            disabled={busy}
+            onChange={(ids) => setKbSelection({ key: conversationId ?? null, ids })}
+          />
+        </div>
         <AttachmentPicker
           pending={pending}
           disabled={busy}
