@@ -1,5 +1,7 @@
 import {
   CHAT_MODEL_AUTO,
+  DLP_CONFIRM_STATUS,
+  DLP_DETECTOR_LABELS_VI,
   formatUsd,
   MAX_FILES_PER_MESSAGE,
   MODEL_TIER_LABELS_VI,
@@ -17,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PromptPicker } from '../workspace/PromptPicker';
 import {
+  ApiError,
   deleteConversation,
   fetchChatKnowledgeBases,
   fetchChatModels,
@@ -131,6 +134,13 @@ export function ChatPage({
   const [search, setSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pending, setPending] = useState<PendingFile[]>([]);
+  /** DLP (M15): a message held for confirmation (428), and what was masked in the last one. */
+  const [dlpConfirm, setDlpConfirm] = useState<{
+    reason: string;
+    text: string;
+    attachments: AttachmentRef[];
+  } | null>(null);
+  const [dlpNotice, setDlpNotice] = useState<string | null>(null);
   const [bases, setBases] = useState<ChatKnowledgeBase[]>([]);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -245,6 +255,15 @@ export function ChatPage({
         );
         void navigate(`${CONVERSATION_PATH}/${e.conversationId}`, { replace: !conversationId });
       }
+    } else if (e.type === 'dlp') {
+      const parts = [
+        ...e.masked.map((m) => `${m.count} ${DLP_DETECTOR_LABELS_VI[m.detector].toLowerCase()}`),
+      ];
+      setDlpNotice(
+        parts.length
+          ? `Đã che ${parts.join(', ')} trước khi gửi tới AI; câu trả lời hiển thị lại giá trị gốc.`
+          : 'Đã gửi theo xác nhận của bạn.',
+      );
     } else if (e.type === 'citations') {
       updateLast((m) => ({ ...m, citations: e.citations }));
     } else if (e.type === 'delta') {
@@ -280,7 +299,7 @@ export function ChatPage({
     }
   }
 
-  async function send(text: string, resend?: AttachmentRef[]) {
+  async function send(text: string, resend?: AttachmentRef[], dlpAcknowledged = false) {
     const message = text.trim();
     if (!message || busy || (!resend && uploading)) return;
     const attachments =
@@ -293,6 +312,8 @@ export function ChatPage({
     const chosen = pending;
     if (!resend) setPending([]);
     setError(null);
+    setDlpConfirm(null);
+    setDlpNotice(null);
     setBusy(true);
     setView((v) => {
       const list = v.key === currentKey ? v.messages : [];
@@ -342,6 +363,7 @@ export function ChatPage({
           ...(attachments.length ? { fileIds: attachments.map((a) => a.id) } : {}),
           ...(selectedBases.length ? { knowledgeBaseIds: selectedBases } : {}),
           ...(!conversationId && projectFilter ? { projectId: projectFilter } : {}),
+          ...(dlpAcknowledged ? { dlpAcknowledged: true } : {}),
         },
         (e) => {
           if (e.type === 'meta') started = true;
@@ -364,7 +386,9 @@ export function ChatPage({
         setView((v) => ({ ...v, messages: v.messages.slice(0, -2) }));
         setInput(message);
         if (!resend) setPending(chosen);
-        setError(errorMessage(err));
+        if (err instanceof ApiError && err.status === DLP_CONFIRM_STATUS) {
+          setDlpConfirm({ reason: err.message, text: message, attachments });
+        } else setError(errorMessage(err));
       }
     } finally {
       controller.current = null;
@@ -520,6 +544,37 @@ export function ChatPage({
             {error}
           </p>
         )}
+        {dlpConfirm && (
+          <div
+            role="alertdialog"
+            aria-label="Xác nhận gửi dữ liệu nhạy cảm"
+            className="flex flex-col gap-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            <p>{dlpConfirm.reason}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded bg-amber-700 px-3 py-1 text-white"
+                onClick={() => {
+                  const { text, attachments } = dlpConfirm;
+                  setInput('');
+                  setPending([]);
+                  void send(text, attachments, true);
+                }}
+              >
+                Vẫn gửi
+              </button>
+              <button
+                type="button"
+                className="rounded border border-amber-400 px-3 py-1"
+                onClick={() => setDlpConfirm(null)}
+              >
+                Sửa lại
+              </button>
+            </div>
+          </div>
+        )}
+        {dlpNotice && <p className="text-xs text-slate-600">{dlpNotice}</p>}
 
         {!conversationId && currentProject && (
           <p className="text-xs text-slate-600">

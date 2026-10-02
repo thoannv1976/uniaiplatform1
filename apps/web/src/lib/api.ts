@@ -21,9 +21,14 @@ import {
   type KbDocument,
   type KnowledgeBase,
   type UpdateKnowledgeBaseRequest,
+  dlpPolicyViewSchema,
+  dlpTestResponseSchema,
   routerTestResponseSchema,
   routerViewSchema,
   type RouterConfig,
+  type DlpPolicy,
+  type DlpPolicyView,
+  type DlpTestResponse,
   type RouterTestResponse,
   type RouterView,
   killSwitchSchema,
@@ -724,4 +729,25 @@ export async function fetchMyFiles(idToken: string): Promise<FileView[]> {
 
 export async function deleteFile(idToken: string, id: string): Promise<void> {
   await remove(`/api/files/${id}`, idToken);
+}
+
+// ---- M15: DLP ----
+
+export async function fetchDlpRules(idToken: string): Promise<DlpPolicyView> {
+  return dlpPolicyViewSchema.parse(await call('/api/admin/dlp-rules', idToken));
+}
+
+export async function saveDlpRules(idToken: string, policy: DlpPolicy): Promise<DlpPolicyView> {
+  return dlpPolicyViewSchema.parse(
+    await call('/api/admin/dlp-rules', idToken, { method: 'PUT', body: JSON.stringify(policy) }),
+  );
+}
+
+export async function testDlpRules(idToken: string, text: string): Promise<DlpTestResponse> {
+  return dlpTestResponseSchema.parse(
+    await call('/api/admin/dlp-rules/test', idToken, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+  );
 }

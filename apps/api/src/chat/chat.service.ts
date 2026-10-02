@@ -22,6 +22,7 @@ import {
 } from '@uniai/firestore';
 import {
   CHAT_MODEL_AUTO,
+  createUnmasker,
   DEFAULT_SYSTEM_PROMPT,
   FILE_KIND_LABELS_VI,
   formatSseEvent,
@@ -36,11 +37,13 @@ import {
   type MessageStatus,
   type Price,
   type UserProfile,
+  unmaskText,
 } from '@uniai/shared';
 import type { Response } from 'express';
 import { ProviderRuntime, ProviderUnavailableError } from '../ai/provider-runtime.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
 import { AuditService } from '../audit/audit.service.js';
+import { DlpService, type DlpOutcome } from '../dlp/dlp.service.js';
 import { FilesService, type LoadedAttachment } from '../files/files.service.js';
 import { KnowledgeRetrieval } from '../knowledge/retrieval.service.js';
 import { PROJECT_STORE } from '../workspace/tokens.js';
@@ -200,7 +203,7 @@ export function planCost(
  * The AI Gateway's chat path (spec 5.2): route → resolve provider → reserve quota → store
  * the turn → stream SSE → settle the real cost (also when the user cancels).
  * A provider failing before any text is replaced once by an equivalent model (fallback,
- * spec 8.8); DLP comes in phase 2.
+ * spec 8.8). DLP (spec 8.11) checks what the user adds before anything is stored or sent.
  */
 @Injectable()
 export class ChatService {
@@ -219,6 +222,7 @@ export class ChatService {
     private readonly smartRouter: RouterService,
     private readonly retrieval: KnowledgeRetrieval,
     @Inject(PROJECT_STORE) private readonly projects: ProjectStore,
+    private readonly dlp: DlpService,
   ) {}
 
   private async resolve(route: Route): Promise<LLMProvider> {
@@ -341,24 +345,48 @@ export class ChatService {
     const projectFiles = project?.fileIds.length
       ? await this.files.forProject(user.uid, project.fileIds)
       : [];
-    const attached = req.fileIds?.length ? await this.files.forMessage(user.uid, req.fileIds) : [];
+    const attachedRaw = req.fileIds?.length
+      ? await this.files.forMessage(user.uid, req.fileIds)
+      : [];
+    // DLP (M15): blocks (422) or asks for confirmation (428) before anything is stored,
+    // reserved or sent; values the policy masks become placeholders in every part of the
+    // prompt, history included.
+    const dlp = await this.dlp.check(
+      user,
+      [
+        req.message,
+        ...attachedRaw.flatMap((f) => (f.text ? [f.text] : [])),
+        ...(project ? [project.instructions] : []),
+        ...projectFiles.flatMap((f) => (f.text ? [f.text] : [])),
+      ],
+      req.dlpAcknowledged === true,
+    );
+    const maskFile = (f: LoadedAttachment): LoadedAttachment =>
+      f.text === null ? f : { ...f, text: dlp.apply(f.text) };
+    const attached = attachedRaw.map(maskFile);
+    const projectDocs = projectFiles.map(maskFile);
+    const projectPrompt = project
+      ? { name: project.name, instructions: dlp.apply(project.instructions) }
+      : null;
+    const message = dlp.apply(req.message);
     // RAG (M13): passages from the selected knowledge bases go before the question.
     const rag = req.knowledgeBaseIds?.length
-      ? await this.retrieval.retrieve(user, req.knowledgeBaseIds, req.message, RAG_MAX_CHARS)
+      ? await this.retrieval.retrieve(user, req.knowledgeBaseIds, message, RAG_MAX_CHARS)
       : { citations: [], context: '' };
-    const question = rag.context ? `${rag.context}\n${req.message}` : req.message;
-    const earlier = await this.loadHistoryFiles(user.uid, history);
+    const question = rag.context ? `${rag.context}\n${message}` : message;
+    const earlierFiles = await this.loadHistoryFiles(user.uid, history);
+    const earlier = (m: HistoryMessage) => earlierFiles(m).map(maskFile);
     // Files make prompts long: the route's context window decides how much of them fits.
     const build = (r: Route) => {
       const budget = Math.min(r.model.contextWindow * HISTORY_CHARS_PER_TOKEN, HISTORY_MAX_CHARS);
       const vision = r.model.capabilities.includes('image');
       const turns = history.map((m) => ({
         role: m.role,
-        ...withAttachments(m.content, earlier(m), Math.floor(budget / 4), vision),
+        ...withAttachments(dlp.apply(m.content), earlier(m), Math.floor(budget / 4), vision),
       }));
       const next = withAttachments(question, attached, budget - question.length, vision);
-      const system = project
-        ? projectSystemPrompt(project, projectFiles, Math.floor(budget / 4))
+      const system = projectPrompt
+        ? projectSystemPrompt(projectPrompt, projectDocs, Math.floor(budget / 4))
         : DEFAULT_SYSTEM_PROMPT;
       return buildMessages(turns, next, budget, system);
     };
@@ -391,7 +419,18 @@ export class ChatService {
       throw err;
     }
     await this.stream(
-      { user, req, build, requireImage, turn, requestTime, res, citations: rag.citations },
+      {
+        user,
+        req,
+        build,
+        requireImage,
+        turn,
+        requestTime,
+        res,
+        citations: rag.citations,
+        dlp,
+        unmask: createUnmasker(dlp.mapping),
+      },
       first,
       provider,
     );
@@ -556,6 +595,22 @@ export class ChatService {
       });
     sendMeta(first.route);
     if (ctx.citations.length) send({ type: 'citations', citations: ctx.citations });
+    const { decision } = ctx.dlp;
+    const masked = (decision.byAction.mask ?? []).map((d) => ({
+      detector: d,
+      count: decision.counts[d] ?? 0,
+    }));
+    const acknowledged = decision.byAction.warn ?? [];
+    if (masked.length || acknowledged.length) {
+      send({ type: 'dlp', masked, acknowledged });
+      this.dlp.record(
+        user,
+        acknowledged.length ? 'warn' : 'mask',
+        decision,
+        'sent',
+        `conversations/${turn.conversationId}/messages/${turn.userMessageId}`,
+      );
+    }
     if (first.route.reason !== 'Người dùng chọn model') {
       this.auditQuietly('MODEL_ROUTED', user.uid, turn, {
         model: first.route.model.id,
@@ -570,9 +625,11 @@ export class ChatService {
     let status: Exclude<MessageStatus, 'streaming'>;
     try {
       for (;;) {
-        result = await this.attempt(planned, provider, controller.signal, (delta) =>
-          send({ type: 'delta', text: delta }),
-        );
+        result = await this.attempt(planned, provider, controller.signal, (delta) => {
+          // Placeholders ([CCCD_1]…) go back to the values the user typed.
+          const text = ctx.unmask.push(delta);
+          if (text) send({ type: 'delta', text });
+        });
         const providerId = planned.route.model.providerId;
         if (result.error?.retryable) this.circuit.failure(providerId);
         else if (!result.error) this.circuit.success(providerId);
@@ -678,7 +735,7 @@ export class ChatService {
     const error = result.error ? { code: result.error.code, message: result.error.message } : null;
     try {
       await this.conversations.finishTurn(turn.conversationId, turn.messageId, {
-        content: result.text,
+        content: unmaskText(result.text, ctx.dlp.mapping),
         status,
         usage: result.usage,
         cost,
@@ -705,6 +762,8 @@ export class ChatService {
     });
 
     markFinished();
+    const rest = ctx.unmask.flush();
+    if (rest) send({ type: 'delta', text: rest });
     if (error) send({ type: 'error', code: error.code, message: error.message });
     send({
       type: 'done',
@@ -758,4 +817,7 @@ interface StreamContext {
   res: Response;
   /** Knowledge-base passages given to the model (M13). */
   citations: Citation[];
+  /** DLP outcome of the request and the streaming placeholder restorer (M15). */
+  dlp: DlpOutcome;
+  unmask: ReturnType<typeof createUnmasker>;
 }

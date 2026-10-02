@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ChatStreamEvent, Conversation, ConversationDetail } from '@uniai/shared';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../lib/api';
 import { ChatPage, sortAndFilter, type ChatApi } from './ChatPage';
 
 const conv = (id: string, title: string, over: Partial<Conversation> = {}): Conversation => ({
@@ -398,5 +399,44 @@ describe('ChatPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Dừng' }));
     expect(await screen.findByText('Đã dừng')).toBeInTheDocument();
     expect(screen.getByText('Một phần')).toBeInTheDocument();
+  });
+
+  it('asks before sending sensitive data and reports what was masked', async () => {
+    const { api, ui } = setup((_t, req, onEvent) => {
+      if (!req.dlpAcknowledged) {
+        return Promise.reject(
+          new ApiError(
+            428,
+            'Nội dung có thể chứa dữ liệu sinh viên/nhân sự. Bạn có chắc muốn gửi tới AI không?',
+          ),
+        );
+      }
+      onEvent(META);
+      onEvent({
+        type: 'dlp',
+        masked: [{ detector: 'cccd', count: 1 }],
+        acknowledged: ['student_data'],
+      });
+      onEvent({ type: 'delta', text: 'Đã nhận' });
+      return Promise.resolve();
+    });
+    ui('/');
+    fireEvent.change(await screen.findByLabelText('Tin nhắn'), {
+      target: { value: 'MSV 11201234 điểm 8' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('dữ liệu sinh viên/nhân sự');
+    expect(screen.getByLabelText('Tin nhắn')).toHaveValue('MSV 11201234 điểm 8');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Vẫn gửi' }));
+    expect(await screen.findByText('Đã nhận')).toBeInTheDocument();
+    expect(api.streamChat).toHaveBeenLastCalledWith(
+      'tok',
+      { message: 'MSV 11201234 điểm 8', model: 'auto', dlpAcknowledged: true },
+      expect.any(Function),
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByText(/Đã che 1 số cccd\/cmnd trước khi gửi tới AI/)).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 });

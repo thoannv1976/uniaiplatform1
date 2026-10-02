@@ -2,7 +2,7 @@
 
 Cập nhật mỗi khi Claude Cowork thay đổi hạ tầng hoặc Claude Code thêm biến/secret.
 
-Cập nhật lần cuối: 02/10/2026 – M14 (Claude Code): collection `prompts`, `projects`, `conversations.projectId` (không cần hạ tầng). Trước đó – M13 (Claude Code): RAG trong chat (không cần hạ tầng mới; `conversations.knowledgeBaseIds`, `messages.citations`). Trước đó – M12 (Claude Code): Cloud Tasks `uniai-kb-ingest[-staging]` (`infra/knowledge.sh`),
+Cập nhật lần cuối: 02/10/2026 – M15 (Claude Code): `settings/dlp` (chính sách DLP, không cần hạ tầng; không dùng Cloud DLP API). Trước đó – M14 (Claude Code): collection `prompts`, `projects`, `conversations.projectId` (không cần hạ tầng). Trước đó – M13 (Claude Code): RAG trong chat (không cần hạ tầng mới; `conversations.knowledgeBaseIds`, `messages.citations`). Trước đó – M12 (Claude Code): Cloud Tasks `uniai-kb-ingest[-staging]` (`infra/knowledge.sh`),
 worker deploy trước API, biến `WORKER_URL`/`KB_TASKS_QUEUE`/`TASKS_SA_EMAIL` (API) và `FILES_BUCKET`/`EMBEDDING_LOCATION`
 (worker, 1 GiB), index vector `chunks`; collection `knowledgeBases`, `documents`, `chunks`. Trước đó – M11 (Claude Code): `settings/router` (luật Smart Router, không cần hạ tầng). Trước đó – M10 (Claude Code): `infra/hardening.sh` (PITR, backup hằng ngày 14 ngày, log bucket
 `uniai-audit` + sink, cảnh báo lỗi > 5 %), `settings/killSwitch`, runbook vận hành và checklist go-live. Trước đó – M9 (Claude Code): bucket `gs://uniaiplatform1-uploads` (`infra/storage.sh`: CORS,
@@ -54,6 +54,7 @@ Quyết định của Chủ dự án: [`docs/QUYET_DINH.md`](../QUYET_DINH.md).
 | `chunks/{documentId}_{n}`                | Đoạn văn bản + vector 768 chiều (Vertex AI embedding)                                              | worker (`/jobs/kb-ingest`)                           |
 | `prompts/{id}`, `projects/{id}`          | Prompt riêng/dùng chung (biến `{{…}}`), dự án của người dùng (M14, ADR 0013)                       | API (`/api/prompts`, `/api/projects`)                |
 | `settings/router`                        | Luật Smart Router, nhóm mặc định, tỷ lệ mục tiêu (M11, ADR 0010)                                   | AI Admin, Super Admin                                |
+| `settings/dlp`                           | Chính sách DLP: hành động theo loại dữ liệu, ngoại lệ theo đơn vị/vai trò (M15, ADR 0014)          | Super Admin                                          |
 | `settings/killSwitch`                    | Kill switch: tắt toàn bộ/nhà cung cấp/nhóm/model, lý do, phanh khẩn cấp (M10, ADR 0009)            | Super Admin, AI Admin; worker (phanh khẩn cấp)       |
 | `settings/app`                           | Tỷ giá hiển thị VND/USD (mặc định 26.000) (M8)                                                     | Super Admin (trang Thống kê)                         |
 

@@ -18,5 +18,6 @@ export * from './settings.js';
 export * from './files.js';
 export * from './killswitch.js';
 export * from './router.js';
+export * from './dlp.js';
 export * from './knowledge.js';
 export * from './workspace.js';

@@ -6,6 +6,7 @@ import { DepartmentsPage } from './admin/DepartmentsPage';
 import { KillSwitchPage } from './admin/KillSwitchPage';
 import { KnowledgePage } from './admin/KnowledgePage';
 import { RouterPage } from './admin/RouterPage';
+import { DlpPage } from './admin/DlpPage';
 import { DirectoryPage } from './admin/DirectoryPage';
 import { ModelsPage } from './admin/ModelsPage';
 import { ProvidersPage } from './admin/ProvidersPage';
@@ -29,6 +30,7 @@ const DEPARTMENT_VIEWERS: Role[] = ['super_admin', 'auditor', 'unit_admin', 'ai_
 const REGISTRY_VIEWERS: Role[] = ['super_admin', 'ai_admin', 'auditor'];
 const REGISTRY_EDITORS: Role[] = ['super_admin', 'ai_admin'];
 const QUOTA_VIEWERS: Role[] = ['super_admin', 'unit_admin', 'auditor'];
+const DLP_VIEWERS: Role[] = ['super_admin', 'auditor'];
 
 export const ADMIN_PATHS = {
   directory: '/quan-tri/can-bo',
@@ -42,6 +44,7 @@ export const ADMIN_PATHS = {
   killSwitch: '/quan-tri/kill-switch',
   router: '/quan-tri/dinh-tuyen',
   knowledge: '/quan-tri/kho-tri-thuc',
+  dlp: '/quan-tri/dlp',
 } as const;
 export const MY_USAGE_PATH = '/muc-su-dung';
 export const WORKSPACE_PATH = '/khong-gian';
@@ -175,6 +178,11 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         {REGISTRY_VIEWERS.includes(role) && (
           <NavLink to={ADMIN_PATHS.router} className={tabClass}>
             Định tuyến
+          </NavLink>
+        )}
+        {DLP_VIEWERS.includes(role) && (
+          <NavLink to={ADMIN_PATHS.dlp} className={tabClass}>
+            DLP
           </NavLink>
         )}
         {REGISTRY_VIEWERS.includes(role) && (
@@ -332,6 +340,14 @@ function AdminPages() {
         element={
           <AdminRoute roles={REGISTRY_VIEWERS}>
             {(role) => <RouterPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="dlp"
+        element={
+          <AdminRoute roles={DLP_VIEWERS}>
+            {(role) => <DlpPage canEdit={role === 'super_admin'} getToken={getToken} />}
           </AdminRoute>
         }
       />
