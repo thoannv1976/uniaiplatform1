@@ -63,7 +63,8 @@ for db in "${DATABASES[@]}"; do
   else
     apply gcloud firestore databases update --database="$db" --enable-pitr
   fi
-  if gcloud firestore backups schedules list --database="$db" --format='value(dailyRecurrence)' 2>/dev/null | grep -q .; then
+  # `name` (not dailyRecurrence, which prints empty because it is an empty object).
+  if gcloud firestore backups schedules list --database="$db" --format='value(name)' 2>/dev/null | grep -q .; then
     ok "Đã có lịch backup hằng ngày cho ${db}"
   else
     apply gcloud firestore backups schedules create --database="$db" --recurrence=daily --retention=14d
