@@ -62,6 +62,8 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   embedding 768 chiều, index vector `chunks`. Test dùng `MockEmbedder`, không gọi Vertex AI.
 - RAG (ADR 0012): chỉ tìm trong kho người dùng được dùng (ACL kiểm tra TRƯỚC truy vấn vector, kho ngoài quyền
   → 403); trích dẫn qua sự kiện SSE `citations` và `messages.citations`; không lưu khối tài liệu vào tin nhắn.
+- Không gian làm việc (ADR 0013): prompt riêng chỉ chủ sở hữu thấy; prompt dùng chung do AI Admin/Super Admin
+  (hoặc Unit Admin trong phạm vi) chia sẻ; dự án chỉ chủ sở hữu, chỉ dẫn + tệp dự án vào system prompt.
 - AUTO đi qua Smart Router (`classifyRequest`, luật trong `settings/router`, ADR 0010); lý do định tuyến luôn
   ghi sổ cái. Không gọi AI để phân loại.
 - Dashboard chỉ đọc `usageAggregates` (job worker 5 phút, đúng một lần theo `_checkpoint`, ADR 0007); không quét

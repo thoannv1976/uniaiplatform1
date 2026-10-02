@@ -210,6 +210,16 @@ export class FileStore {
     return snaps.filter((s) => s.exists && s.get('ownerUid') === ownerUid).map(toRecord);
   }
 
+  /** The owner's usable files, newest first (My Files). */
+  async listReady(ownerUid: string, limit = 200): Promise<FileRecord[]> {
+    const snap = await this.col().where('ownerUid', '==', ownerUid).get();
+    return snap.docs
+      .map(toRecord)
+      .filter((r) => r.status === 'ready')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
   async markReady(
     id: string,
     result: { storagePath: string; pages: number | null; chars: number | null; truncated: boolean },

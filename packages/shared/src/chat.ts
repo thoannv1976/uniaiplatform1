@@ -54,6 +54,12 @@ export const chatRequestSchema = z
       .array(fileIdSchema)
       .max(MAX_FILES_PER_MESSAGE, `Tối đa ${MAX_FILES_PER_MESSAGE} tệp mỗi tin nhắn`)
       .optional(),
+    /** Start the new conversation inside this project (M14); ignored for existing ones. */
+    projectId: z
+      .string()
+      .regex(/^[A-Za-z0-9]{1,64}$/, 'Mã dự án không hợp lệ')
+      .nullable()
+      .optional(),
     /** Knowledge bases to search for this message (RAG, M13). */
     knowledgeBaseIds: z
       .array(z.string().regex(/^[A-Za-z0-9]{1,64}$/, 'Mã kho không hợp lệ'))
@@ -108,6 +114,8 @@ export const conversationSchema = z.object({
   expireAt: z.string().nullable(),
   /** Knowledge bases last used in this conversation (M13). */
   knowledgeBaseIds: z.array(z.string()),
+  /** Project the conversation belongs to (M14). */
+  projectId: z.string().nullable(),
 });
 export type Conversation = z.infer<typeof conversationSchema>;
 
@@ -122,9 +130,27 @@ export type ConversationDetail = z.infer<typeof conversationDetailResponseSchema
 
 const titleSchema = z.string().trim().min(1, 'Tiêu đề không được trống').max(200);
 
-export const createConversationRequestSchema = z.object({ title: titleSchema.optional() }).strict();
+export const createConversationRequestSchema = z
+  .object({
+    title: titleSchema.optional(),
+    projectId: z
+      .string()
+      .regex(/^[A-Za-z0-9]{1,64}$/)
+      .nullable()
+      .optional(),
+  })
+  .strict();
 export const updateConversationRequestSchema = z
-  .object({ title: titleSchema.optional(), pinned: z.boolean().optional() })
+  .object({
+    title: titleSchema.optional(),
+    pinned: z.boolean().optional(),
+    /** Move into a project, or out of it (null). */
+    projectId: z
+      .string()
+      .regex(/^[A-Za-z0-9]{1,64}$/)
+      .nullable()
+      .optional(),
+  })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'Cần ít nhất một trường để cập nhật' });
 export type UpdateConversationRequest = z.infer<typeof updateConversationRequestSchema>;

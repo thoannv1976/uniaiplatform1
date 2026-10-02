@@ -14,6 +14,8 @@ export const COLLECTIONS = {
   knowledgeBases: 'knowledgeBases',
   documents: 'documents',
   chunks: 'chunks',
+  prompts: 'prompts',
+  projects: 'projects',
   usageTransactions: 'usageTransactions',
   auditLogs: 'auditLogs',
   settings: 'settings',

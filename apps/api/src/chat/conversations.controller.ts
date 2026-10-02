@@ -10,7 +10,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import type { ConversationStore } from '@uniai/firestore';
+import type { ConversationStore, ProjectStore } from '@uniai/firestore';
 import {
   conversationIdSchema,
   createConversationRequestSchema,
@@ -23,6 +23,7 @@ import { CurrentAuth } from '../auth/current-user.js';
 import { AnyRole } from '../auth/decorators.js';
 import { parseOrBadRequest } from '../common/zod.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
+import { PROJECT_STORE } from '../workspace/tokens.js';
 import { CONVERSATION_STORE } from './chat.service.js';
 
 const NOT_FOUND = 'Không tìm thấy hội thoại.';
@@ -39,7 +40,14 @@ export class ConversationsController {
   constructor(
     @Inject(CONVERSATION_STORE) private readonly conversations: ConversationStore,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(PROJECT_STORE) private readonly projects: ProjectStore,
   ) {}
+
+  private async checkProject(uid: string, projectId: string | null | undefined) {
+    if (projectId && !(await this.projects.get(projectId, uid))) {
+      throw new NotFoundException('Không tìm thấy dự án.');
+    }
+  }
 
   @Get()
   @AnyRole()
@@ -50,11 +58,13 @@ export class ConversationsController {
   @Post()
   @AnyRole()
   async create(@CurrentAuth() auth: AuthContext, @Body() body: unknown): Promise<Conversation> {
-    const { title } = parseOrBadRequest(createConversationRequestSchema, body ?? {});
+    const { title, projectId } = parseOrBadRequest(createConversationRequestSchema, body ?? {});
+    await this.checkProject(auth.profile.uid, projectId);
     return this.conversations.create(
       auth.profile.uid,
       title ?? 'Hội thoại mới',
       this.config.conversationRetentionDays,
+      projectId ?? null,
     );
   }
 
@@ -79,6 +89,7 @@ export class ConversationsController {
   ): Promise<Conversation> {
     const id = idOr404(raw);
     const patch = parseOrBadRequest(updateConversationRequestSchema, body);
+    await this.checkProject(auth.profile.uid, patch.projectId);
     const updated = await this.conversations.update(id, auth.profile.uid, patch);
     if (!updated) throw new NotFoundException(NOT_FOUND);
     return updated;
