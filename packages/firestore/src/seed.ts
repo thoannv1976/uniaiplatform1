@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getDb, isEmulator } from './admin.js';
 import { COLLECTIONS } from './collections.js';
+import { RegistryStore } from './registry.js';
 import { APP_SETTINGS, QUOTA_TIERS, SAMPLE_DEPARTMENTS } from './seed-data.js';
 
 /** Idempotent: re-running overwrites the same documents. */
@@ -16,6 +17,8 @@ export async function seed(db: Firestore): Promise<void> {
   }
   batch.set(db.collection(COLLECTIONS.settings).doc('app'), APP_SETTINGS);
   await batch.commit();
+  // Model Registry catalogue, including the mock models used by local development.
+  await new RegistryStore(db).seedDefaults('seed', { includeMock: true });
 }
 
 async function main(): Promise<void> {

@@ -19,7 +19,7 @@ export async function createApp(
   app.useBodyParser('json', { limit: '6mb' });
   app.enableCors({
     origin: config.webOrigins,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Authorization', 'Content-Type'],
     maxAge: 600,
   });

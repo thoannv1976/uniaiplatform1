@@ -20,7 +20,10 @@ GITHUB_REPO="${GITHUB_REPO:-thoannv1976/uniaiplatform1}"
 STAGING_DB="staging"
 STAGING_SITE="${PROJECT_ID}-staging"
 AR_REPO="uniai"
-SECRETS=(openai-api-key gemini-api-key anthropic-api-key)
+# API keys entered by the admin (ADR 0002): one secret per provider and environment, so a key
+# typed into staging never reaches production (M4).
+SECRETS=(openai-api-key gemini-api-key anthropic-api-key
+  openai-api-key-staging gemini-api-key-staging anthropic-api-key-staging)
 WIF_POOL="github"
 WIF_PROVIDER="github-oidc"
 
@@ -151,7 +154,7 @@ for sa in "$API_SA" "$WORKER_SA"; do
   fi
 done
 
-log "7. Secret Manager: secret rỗng cho API key do Admin nhập (ADR 0002)"
+log "7. Secret Manager: secret rỗng cho API key do Admin nhập (ADR 0002; production + staging)"
 for secret in "${SECRETS[@]}"; do
   if exists gcloud secrets describe "$secret"; then
     ok "Đã có secret ${secret}"

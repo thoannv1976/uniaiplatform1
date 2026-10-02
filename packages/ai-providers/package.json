@@ -17,6 +17,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@anthropic-ai/vertex-sdk": "^0.20.2",
+    "@google/genai": "^2.26.0",
+    "@uniai/shared": "workspace:*",
+    "google-auth-library": "^10.9.1",
+    "openai": "^7.27.0",
     "zod": "^4.6.5"
   },
   "files": [

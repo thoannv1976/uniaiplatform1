@@ -18,8 +18,10 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `apps/api` – NestJS → Cloud Run `uniai-api` (cổng 8080)
 - `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081)
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
-- `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`
-- `packages/ai-providers` – interface `LLMProvider`, `MockProvider`
+- `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
+  `RegistryStore` (providers/models/prices) + danh mục model mẫu
+- `packages/ai-providers` – interface `LLMProvider`; adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
+  `MockProvider`; `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
 
 ## Lệnh
 
@@ -32,6 +34,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `pnpm format` – Prettier
 - `pnpm ops:grant-role --email … --role … --database … [--allow-outside-domain] [--yes]` – cấp vai trò (Cowork, Cloud Shell)
 - `pnpm ops:create-login --email … [--yes]` – tài khoản quản trị dự phòng email + mật khẩu (ADR 0004; mật khẩu gõ ẩn)
+- `pnpm ops:smoke-providers --database staging [--include-disabled] [--model id]` – gọi thử mỗi model, in token/chi phí
 - Health check là `/health` (KHÔNG dùng đường dẫn kết thúc bằng `z` như `/healthz`: Cloud Run giữ riêng)
 
 Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test một app riêng lẻ.
@@ -42,7 +45,9 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
   `firestore.rules` và `storage.rules` luôn là deny-all.
 - Tiền: số nguyên micro-USD, chỉ dùng `packages/shared/src/money.ts`. Không dùng số thực cho tiền.
 - Trừ định mức chỉ qua QuotaService (Firestore transaction); không ghi vào `budgetPeriods` theo từng yêu cầu.
-- Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP.
+- Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager
+  (`<provider>-api-key[-staging]`, chọn theo database), Firestore chỉ giữ `last4` (ADR 0002).
+- Giá model là số nguyên micro-USD/1M token, chỉ thêm bản ghi giá mới (`models/{id}/prices`), không sửa giá cũ.
 - Không commit file key service account; deploy chỉ qua GitHub Actions + Workload Identity Federation.
 - `AuthGuard` là guard toàn cục: mọi endpoint mới PHẢI khai báo `@Roles(...)` (hoặc `@Public()` cho health
   check), nếu không sẽ bị chặn. Thêm endpoint vào ma trận vai trò trong `apps/api/src/auth/auth.emulator.test.ts`.
@@ -58,5 +63,6 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 
 - Giao diện, thông báo lỗi, tài liệu: tiếng Việt. Mã nguồn, tên biến, comment: tiếng Anh.
 - TypeScript strict, ESM (`.js` trong import tương đối ở server packages).
+- Claude Code tự merge PR của mình khi CI xanh (quyết định 02/10/2026); production (tag `v*`) do Chủ dự án duyệt.
 - Mỗi milestone một PR theo `.github/pull_request_template.md`; nếu cần thao tác hạ tầng thì kèm
   `docs/deploy/Mx-runbook.md` và Issue "Deploy Mx" (`.github/ISSUE_TEMPLATE/deploy.md`).

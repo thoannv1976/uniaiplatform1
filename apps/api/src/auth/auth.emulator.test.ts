@@ -117,7 +117,8 @@ describe('first sign-in and account status', () => {
 });
 
 describe('role matrix', () => {
-  const cases: { name: string; call: () => request.Test; allowed: Role[] }[] = [
+  let seq = 0;
+  const cases: { name: string; call: () => request.Test; allowed: Role[]; ok?: number }[] = [
     { name: 'GET /api/me', call: () => http().get('/api/me'), allowed: [...ROLES] },
     {
       name: 'GET /api/admin/users',
@@ -169,6 +170,77 @@ describe('role matrix', () => {
       call: () => http().get('/api/admin/directory/export.csv'),
       allowed: ['super_admin', 'auditor', 'unit_admin'],
     },
+    {
+      name: 'GET /api/admin/providers',
+      call: () => http().get('/api/admin/providers'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'PATCH /api/admin/providers/:id',
+      call: () => http().patch('/api/admin/providers/gemini').send({ fallbackOrder: 2 }),
+      allowed: ['super_admin', 'ai_admin'],
+    },
+    {
+      name: 'PUT /api/admin/providers/:id/key',
+      call: () =>
+        http()
+          .put('/api/admin/providers/openai/key')
+          .send({ apiKey: 'sk-matrix-0123456789abcdef' }),
+      allowed: ['super_admin'],
+    },
+    {
+      name: 'GET /api/admin/models',
+      call: () => http().get('/api/admin/models'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'POST /api/admin/models',
+      call: () =>
+        http()
+          .post('/api/admin/models')
+          .send({
+            id: `matrix-${++seq}`,
+            providerId: 'mock',
+            apiModelId: 'mock-economy',
+            displayName: 'Matrix',
+            tier: 'economy',
+            contextWindow: 1000,
+            maxOutputTokens: 100,
+            capabilities: ['text'],
+            price: { inputPerMTok: 1, outputPerMTok: 1 },
+          }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 201,
+    },
+    {
+      name: 'POST /api/admin/models/seed',
+      call: () => http().post('/api/admin/models/seed'),
+      allowed: ['super_admin', 'ai_admin'],
+    },
+    {
+      name: 'PATCH /api/admin/models/:id',
+      call: () => http().patch('/api/admin/models/mock-economy').send({ priority: 1 }),
+      allowed: ['super_admin', 'ai_admin'],
+    },
+    {
+      name: 'GET /api/admin/models/:id/prices',
+      call: () => http().get('/api/admin/models/mock-economy/prices'),
+      allowed: ['super_admin', 'ai_admin', 'auditor'],
+    },
+    {
+      name: 'POST /api/admin/models/:id/prices',
+      call: () =>
+        http()
+          .post('/api/admin/models/mock-economy/prices')
+          .send({ inputPerMTok: 1, outputPerMTok: 1 }),
+      allowed: ['super_admin', 'ai_admin'],
+      ok: 201,
+    },
+    {
+      name: 'POST /api/admin/models/:id/test',
+      call: () => http().post('/api/admin/models/mock-economy/test').send({ prompt: 'Chào' }),
+      allowed: ['super_admin', 'ai_admin'],
+    },
   ];
 
   for (const c of cases) {
@@ -177,7 +249,7 @@ describe('role matrix', () => {
       for (const role of ROLES) {
         await givenUser(app, `r-${role}`, role);
         const res = await c.call().set('Authorization', tokenFor(`r-${role}`));
-        const expected = c.allowed.includes(role) ? 200 : 403;
+        const expected = c.allowed.includes(role) ? (c.ok ?? 200) : 403;
         expect(res.status, `${role} → ${c.name}`).toBe(expected);
       }
     });

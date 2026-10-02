@@ -18,7 +18,8 @@
     "emulators": "firebase emulators:start --project demo-uniai --only auth,firestore,storage,ui",
     "seed": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GCLOUD_PROJECT=demo-uniai pnpm --filter @uniai/firestore seed",
     "ops:grant-role": "pnpm --filter @uniai/firestore exec node dist/ops/grant-role.js",
-    "ops:create-login": "pnpm --filter @uniai/firestore exec node dist/ops/create-login.js"
+    "ops:create-login": "pnpm --filter @uniai/firestore exec node dist/ops/create-login.js",
+    "ops:smoke-providers": "pnpm --filter @uniai/api exec node dist/ops/smoke-providers.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

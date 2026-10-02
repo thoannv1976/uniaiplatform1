@@ -9,13 +9,16 @@ import {
   type HttpException,
 } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
-import { DepartmentError, DirectoryError } from '@uniai/firestore';
+import { DepartmentError, DirectoryError, RegistryError } from '@uniai/firestore';
 import { CsvFormatError } from '@uniai/shared';
 
 /** Maps domain errors thrown by the stores to HTTP errors with their Vietnamese message. */
-@Catch(DepartmentError, DirectoryError, CsvFormatError)
+@Catch(DepartmentError, DirectoryError, RegistryError, CsvFormatError)
 export class DomainErrorFilter extends BaseExceptionFilter implements ExceptionFilter {
-  override catch(error: DepartmentError | DirectoryError | CsvFormatError, host: ArgumentsHost) {
+  override catch(
+    error: DepartmentError | DirectoryError | RegistryError | CsvFormatError,
+    host: ArgumentsHost,
+  ) {
     let http: HttpException;
     if (error instanceof CsvFormatError) http = new BadRequestException(error.message);
     else if (error.code === 'not_found') http = new NotFoundException(error.message);

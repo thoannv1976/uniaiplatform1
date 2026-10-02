@@ -1,4 +1,21 @@
 import {
+  modelListResponseSchema,
+  modelViewSchema,
+  priceListResponseSchema,
+  priceSchema,
+  providerListResponseSchema,
+  providerViewSchema,
+  seedModelsResponseSchema,
+  testModelResponseSchema,
+  type CreateModelRequest,
+  type ModelView,
+  type NewPrice,
+  type Price,
+  type ProviderId,
+  type ProviderView,
+  type TestModelResponse,
+  type UpdateModelRequest,
+  type UpdateProviderRequest,
   departmentListResponseSchema,
   departmentSchema,
   directoryEntrySchema,
@@ -145,4 +162,85 @@ export async function downloadExport(idToken: string, target: ImportTarget, file
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ---- M4: Model Registry ----
+
+export async function fetchProviders(idToken: string): Promise<ProviderView[]> {
+  return providerListResponseSchema.parse(await call('/api/admin/providers', idToken)).providers;
+}
+
+export async function updateProvider(
+  idToken: string,
+  id: ProviderId,
+  patch: UpdateProviderRequest,
+): Promise<ProviderView> {
+  const body = JSON.stringify(patch);
+  return providerViewSchema.parse(
+    await call(`/api/admin/providers/${id}`, idToken, { method: 'PATCH', body }),
+  );
+}
+
+/** Write-only: the key is sent once and never read back. */
+export async function setProviderKey(
+  idToken: string,
+  id: ProviderId,
+  apiKey: string,
+): Promise<ProviderView> {
+  const body = JSON.stringify({ apiKey });
+  return providerViewSchema.parse(
+    await call(`/api/admin/providers/${id}/key`, idToken, { method: 'PUT', body }),
+  );
+}
+
+export async function fetchModels(idToken: string): Promise<ModelView[]> {
+  return modelListResponseSchema.parse(await call('/api/admin/models', idToken)).models;
+}
+
+export async function createModel(idToken: string, input: CreateModelRequest) {
+  const body = JSON.stringify(input);
+  return modelViewSchema.parse(await call('/api/admin/models', idToken, { method: 'POST', body }));
+}
+
+export async function updateModel(idToken: string, id: string, patch: UpdateModelRequest) {
+  const body = JSON.stringify(patch);
+  return modelViewSchema.parse(
+    await call(`/api/admin/models/${encodeURIComponent(id)}`, idToken, { method: 'PATCH', body }),
+  );
+}
+
+export async function seedModels(idToken: string): Promise<string[]> {
+  return seedModelsResponseSchema.parse(
+    await call('/api/admin/models/seed', idToken, { method: 'POST' }),
+  ).created;
+}
+
+export async function fetchPrices(idToken: string, modelId: string): Promise<Price[]> {
+  return priceListResponseSchema.parse(
+    await call(`/api/admin/models/${encodeURIComponent(modelId)}/prices`, idToken),
+  ).prices;
+}
+
+export async function addPrice(idToken: string, modelId: string, price: NewPrice) {
+  const body = JSON.stringify(price);
+  return priceSchema.parse(
+    await call(`/api/admin/models/${encodeURIComponent(modelId)}/prices`, idToken, {
+      method: 'POST',
+      body,
+    }),
+  );
+}
+
+export async function testModel(
+  idToken: string,
+  modelId: string,
+  prompt?: string,
+): Promise<TestModelResponse> {
+  const body = JSON.stringify(prompt ? { prompt } : {});
+  return testModelResponseSchema.parse(
+    await call(`/api/admin/models/${encodeURIComponent(modelId)}/test`, idToken, {
+      method: 'POST',
+      body,
+    }),
+  );
 }
