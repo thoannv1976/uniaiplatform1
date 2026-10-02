@@ -69,6 +69,8 @@ export function usageCost(usage: TokenUsage, price: ModelPrice): MicroUsd {
 /** Format micro-USD as a USD string, e.g. "$1.27" or "$0.0005" for tiny amounts. */
 export function formatUsd(micro: MicroUsd): string {
   const usd = microToUsd(micro);
+  // Single chat answers often cost less than a hundredth of a cent.
+  if (usd > 0 && usd < 0.0001) return '<$0.0001';
   const digits = Math.abs(usd) > 0 && Math.abs(usd) < 0.01 ? 4 : 2;
   return `$${usd.toFixed(digits)}`;
 }

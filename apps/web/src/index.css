@@ -1,1 +1,38 @@
 @import 'tailwindcss';
+
+/* Chat answers rendered from Markdown */
+.markdown p {
+  margin: 0.4rem 0;
+}
+.markdown ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+  margin: 0.4rem 0;
+}
+.markdown ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+  margin: 0.4rem 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-weight: 600;
+  margin: 0.8rem 0 0.4rem;
+}
+.markdown h1 {
+  font-size: 1.25rem;
+}
+.markdown h2 {
+  font-size: 1.125rem;
+}
+.markdown code:not(pre code) {
+  background: #f1f5f9;
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+}
+.markdown blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.75rem;
+  color: #475569;
+}

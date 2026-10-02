@@ -1,5 +1,5 @@
 import type { Role } from '@uniai/shared';
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-router';
 import { ChatTestPage } from './admin/ChatTestPage';
 import { DepartmentsPage } from './admin/DepartmentsPage';
@@ -10,6 +10,10 @@ import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AccountPanel } from './components/AccountPanel';
 import { ApiStatus } from './components/ApiStatus';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { ROLE_LABELS_VI } from '@uniai/shared';
+
+// Markdown, math and code highlighting are only loaded once someone opens the chat.
+const ChatPage = lazy(() => import('./chat/ChatPage').then((m) => ({ default: m.ChatPage })));
 
 const PEOPLE_ADMINS: Role[] = ['super_admin', 'auditor', 'unit_admin'];
 const DEPARTMENT_VIEWERS: Role[] = ['super_admin', 'auditor', 'unit_admin', 'ai_admin'];
@@ -33,9 +37,31 @@ function adminHome(role: Role): string {
 }
 
 function Home() {
-  const { user, profile, signIn, signInWithPassword, signOut } = useAuth();
+  const { user, profile, signIn, signInWithPassword, signOut, getToken } = useAuth();
   const role =
     profile.kind === 'ok' && profile.profile.status === 'active' ? profile.profile.role : null;
+  if (role && profile.kind === 'ok') {
+    return (
+      <>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+          <span>
+            {profile.profile.name ?? profile.profile.email} · {ROLE_LABELS_VI[role]}
+          </span>
+          {DEPARTMENT_VIEWERS.includes(role) && (
+            <Link to={adminHome(role)} className="text-sky-800 underline">
+              Trang quản trị
+            </Link>
+          )}
+          <button type="button" className="text-sky-800 underline" onClick={() => void signOut()}>
+            Đăng xuất
+          </button>
+        </div>
+        <Suspense fallback={<p>Đang tải…</p>}>
+          <ChatPage getToken={getToken} />
+        </Suspense>
+      </>
+    );
+  }
   return (
     <>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -202,7 +228,7 @@ export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <main className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-6 px-4 py-8">
+        <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-4 px-4 py-6">
           <header>
             <p className="text-sm font-semibold tracking-wide text-sky-700">
               TRƯỜNG ĐẠI HỌC NGOẠI THƯƠNG
@@ -214,10 +240,11 @@ export function App() {
           </header>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/hoi-thoai/:conversationId" element={<Home />} />
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M5</footer>
+          <footer className="text-xs text-slate-400">Bản phát triển – milestone M6</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

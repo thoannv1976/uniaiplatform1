@@ -44,7 +44,7 @@ const STOP_REASONS: Record<string, StopReason> = {
 /**
  * Claude through the Claude API (direct, key) or Vertex AI (service account). Thinking
  * is left at the model default; depth comes from the registry's `reasoningEffort`.
- * Refusals end with stopReason "refusal" so the gateway can fall back (M8); the
+ * Refusals end with stopReason "refusal" so the gateway can fall back (M10); the
  * server-side `fallbacks` parameter is not used because the ledger must record the
  * model that actually answered and Vertex AI does not support it.
  */

@@ -11,3 +11,10 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+// Installable app (PWA). Only in production builds, so development is never served stale files.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
