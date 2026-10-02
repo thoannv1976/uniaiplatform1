@@ -1,4 +1,5 @@
 import { Controller, Get, type INestApplication } from '@nestjs/common';
+import { MemorySecretStore, MockProvider, type ProviderConnection } from '@uniai/ai-providers';
 import { AuditStore, clearFirestoreEmulator, getDb, seed, UserStore } from '@uniai/firestore';
 import type { Role, UserStatus } from '@uniai/shared';
 import request from 'supertest';
@@ -38,24 +39,35 @@ export class RecordingIdentityAdmin implements IdentityAdmin {
 export const tokenFor = (uid: string, email = `${uid}@ftu.edu.vn`, verified = true) =>
   `Bearer ${uid}|${email}|${verified ? 1 : 0}`;
 
-export async function startApp() {
+export async function startApp(env: Record<string, string> = {}) {
   const identity = new RecordingIdentityAdmin();
+  const secrets = new MemorySecretStore();
+  /** Every adapter the API built, with the key it was given; all of them are mocks. */
+  const connections: ProviderConnection[] = [];
   const app = await createApp(
     loadConfig({
       ALLOWED_EMAIL_DOMAINS: 'ftu.edu.vn',
       EXTRA_ALLOWED_EMAILS: 'breakglass@gmail.com',
+      GCLOUD_PROJECT: 'demo-uniai',
+      ENABLE_MOCK_PROVIDER: 'true',
+      ...env,
     }),
     {
       quiet: true,
       overrides: {
         tokenVerifier: fakeVerifier,
         identityAdmin: identity,
+        secretStore: secrets,
+        providerFactory: (c) => {
+          connections.push(c);
+          return new MockProvider();
+        },
         extraControllers: [UnguardedTestController],
       },
     },
   );
   await app.init();
-  return { app, identity };
+  return { app, identity, secrets, connections };
 }
 
 export const users = () => new UserStore(getDb());

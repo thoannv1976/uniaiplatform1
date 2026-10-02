@@ -46,7 +46,7 @@ export function tokenCost(tokens: number, microPerMTok: MicroUsd): MicroUsd {
 export interface ModelPrice {
   inputPerMTok: MicroUsd;
   outputPerMTok: MicroUsd;
-  cachedInputPerMTok?: MicroUsd;
+  cachedInputPerMTok?: MicroUsd | null;
 }
 
 export interface TokenUsage {

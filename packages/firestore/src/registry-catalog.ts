@@ -1,0 +1,163 @@
+import {
+  usdToMicro,
+  type CreateModelRequest,
+  type ProviderId,
+  type Transport,
+} from '@uniai/shared';
+
+/** Built-in provider settings; Firestore `providers/{id}` stores only what the admin changed. */
+export const DEFAULT_PROVIDERS: Record<
+  ProviderId,
+  { name: string; transport: Transport; enabled: boolean; fallbackOrder: number }
+> = {
+  openai: { name: 'OpenAI', transport: 'direct', enabled: true, fallbackOrder: 1 },
+  gemini: { name: 'Google Gemini', transport: 'vertex', enabled: true, fallbackOrder: 2 },
+  anthropic: { name: 'Anthropic Claude', transport: 'vertex', enabled: true, fallbackOrder: 3 },
+  mock: { name: 'Mock (thử nghiệm)', transport: 'direct', enabled: true, fallbackOrder: 9 },
+};
+
+const usd = (input: number, output: number, cached: number | null = null) => ({
+  inputPerMTok: usdToMicro(input),
+  outputPerMTok: usdToMicro(output),
+  cachedInputPerMTok: cached === null ? null : usdToMicro(cached),
+});
+
+const VERIFY =
+  'Giá và mã model theo bản mô tả gốc – cần xác minh với bảng giá chính thức trước khi bật.';
+const VERTEX =
+  'Giá API Anthropic; giá qua Vertex AI có thể khác – xác minh trên bảng giá Vertex AI.';
+
+/**
+ * Initial catalogue (spec 8.5). Real models start disabled: an admin verifies the model id
+ * and price (button "Thử") before turning them on. Mock models are for emulator/staging.
+ */
+export const DEFAULT_MODELS: CreateModelRequest[] = [
+  {
+    id: 'gpt-6-luna',
+    providerId: 'openai',
+    apiModelId: 'gpt-6-luna',
+    displayName: 'GPT-6 Luna',
+    tier: 'economy',
+    status: 'disabled',
+    contextWindow: 400_000,
+    maxOutputTokens: 32_000,
+    capabilities: ['text', 'image', 'pdf', 'tools'],
+    priority: 100,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: VERIFY,
+    price: usd(0.1, 0.5),
+  },
+  {
+    id: 'gpt-6.1-sol',
+    providerId: 'openai',
+    apiModelId: 'gpt-6.1-sol',
+    displayName: 'GPT-6.1 Sol',
+    tier: 'advanced',
+    status: 'disabled',
+    contextWindow: 400_000,
+    maxOutputTokens: 64_000,
+    capabilities: ['text', 'image', 'pdf', 'tools'],
+    priority: 100,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: VERIFY,
+    price: usd(2, 10),
+  },
+  {
+    id: 'gemini-3.1-flash-lite',
+    providerId: 'gemini',
+    apiModelId: 'gemini-3.1-flash-lite',
+    displayName: 'Gemini 3.1 Flash-Lite',
+    tier: 'economy',
+    status: 'disabled',
+    contextWindow: 1_048_576,
+    maxOutputTokens: 65_536,
+    capabilities: ['text', 'image', 'pdf', 'tools'],
+    priority: 100,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: `${VERIFY} Giá qua Vertex AI.`,
+    price: usd(0.25, 1.5),
+  },
+  {
+    id: 'claude-haiku-4-5',
+    providerId: 'anthropic',
+    apiModelId: 'claude-haiku-4-5@20251001',
+    displayName: 'Claude Haiku 4.5',
+    tier: 'standard',
+    status: 'disabled',
+    contextWindow: 200_000,
+    maxOutputTokens: 64_000,
+    capabilities: ['text', 'image', 'pdf', 'tools'],
+    priority: 100,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: VERTEX,
+    price: usd(1, 5, 0.1),
+  },
+  {
+    id: 'claude-sonnet-5-5',
+    providerId: 'anthropic',
+    apiModelId: 'claude-sonnet-5-5',
+    displayName: 'Claude Sonnet 5.5',
+    tier: 'advanced',
+    status: 'disabled',
+    contextWindow: 1_000_000,
+    maxOutputTokens: 128_000,
+    capabilities: ['text', 'image', 'pdf', 'tools'],
+    priority: 100,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: VERTEX,
+    price: usd(2, 10, 0.2),
+  },
+  {
+    id: 'claude-opus-5-5',
+    providerId: 'anthropic',
+    apiModelId: 'claude-opus-5-5',
+    displayName: 'Claude Opus 5.5',
+    tier: 'premium',
+    status: 'disabled',
+    contextWindow: 1_000_000,
+    maxOutputTokens: 128_000,
+    capabilities: ['text', 'image', 'pdf', 'tools'],
+    priority: 100,
+    rateLimitPerMinute: null,
+    defaultParams: { reasoningEffort: 'medium' },
+    notes: `${VERTEX} Chỉ bật cho nhóm nghiên cứu.`,
+    price: usd(4, 20, 0.2),
+  },
+  {
+    id: 'mock-economy',
+    providerId: 'mock',
+    apiModelId: 'mock-economy',
+    displayName: 'Mock Economy',
+    tier: 'economy',
+    status: 'active',
+    contextWindow: 128_000,
+    maxOutputTokens: 4_096,
+    capabilities: ['text'],
+    priority: 0,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: 'Chỉ dùng ở emulator, CI và staging; không gọi mạng, không tốn tiền.',
+    price: usd(0.1, 0.5),
+  },
+  {
+    id: 'mock-advanced',
+    providerId: 'mock',
+    apiModelId: 'mock-advanced',
+    displayName: 'Mock Advanced',
+    tier: 'advanced',
+    status: 'active',
+    contextWindow: 128_000,
+    maxOutputTokens: 4_096,
+    capabilities: ['text'],
+    priority: 0,
+    rateLimitPerMinute: null,
+    defaultParams: {},
+    notes: 'Chỉ dùng ở emulator, CI và staging; không gọi mạng, không tốn tiền.',
+    price: usd(2, 10),
+  },
+];

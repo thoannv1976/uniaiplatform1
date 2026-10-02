@@ -6,3 +6,4 @@ export * from './users.js';
 export * from './csv.js';
 export * from './departments.js';
 export * from './directory.js';
+export * from './models.js';

@@ -70,15 +70,16 @@ jobs:
       - name: Tên tài nguyên theo môi trường
         run: |
           if [ "$TARGET" = "production" ]; then
-            suffix=""; db="(default)"; site="${PROJECT_ID}"; max=20
+            suffix=""; db="(default)"; site="${PROJECT_ID}"; max=20; mock=false
           else
-            suffix="-staging"; db="staging"; site="${PROJECT_ID}-staging"; max=3
+            suffix="-staging"; db="staging"; site="${PROJECT_ID}-staging"; max=3; mock=true
           fi
           {
             echo "SUFFIX=$suffix"
             echo "FIRESTORE_DB=$db"
             echo "SITE=$site"
             echo "MAX_INSTANCES=$max"
+            echo "ENABLE_MOCK=$mock"
             echo "IMAGE_BASE=${REGION}-docker.pkg.dev/${PROJECT_ID}/uniai"
             echo "VERSION=${GITHUB_REF_NAME}-${GITHUB_SHA::7}"
           } >> "$GITHUB_ENV"
@@ -123,7 +124,7 @@ jobs:
             --allow-unauthenticated \
             --timeout=900 --concurrency=80 --memory=512Mi \
             --min-instances=0 --max-instances="$MAX_INSTANCES" \
-            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS}" \
+            --set-env-vars="^;^APP_VERSION=${VERSION};GCLOUD_PROJECT=${PROJECT_ID};FIRESTORE_DATABASE_ID=${FIRESTORE_DB};ALLOWED_EMAIL_DOMAINS=${EMAIL_DOMAIN};EXTRA_ALLOWED_EMAILS=${EXTRA_ALLOWED_EMAILS};WEB_ORIGINS=${WEB_ORIGINS};VERTEX_LOCATION=global;ENABLE_MOCK_PROVIDER=${ENABLE_MOCK}" \
             --quiet
 
       - name: Deploy Cloud Run – worker (không công khai)

@@ -11,5 +11,6 @@ Ghi nhận ngày 01/10/2026. Nguồn: tin nhắn của Chủ dự án sau khi du
 | D5  | OpenAI                        | Có dùng; API key do **Admin nhập trong trang quản trị**                                                               |
 | D6  | Chế độ repo                   | Giữ **public**                                                                                                        |
 | –   | Nhánh deploy                  | `main` là nguồn deploy; mọi thay đổi vào `main` qua PR                                                                |
+| –   | Merge PR (02/10/2026)         | Claude Code **tự merge** PR của mình khi CI xanh, không cần hỏi; production (tag `v*`) vẫn do Chủ dự án duyệt         |
 
 D7–D10 chưa chốt (cần trước M5–M10, xem Kế hoạch build v1 mục 3).

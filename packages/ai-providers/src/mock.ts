@@ -1,15 +1,15 @@
+import { estimateTokens } from './errors.js';
 import type { ChatChunk, LLMProvider, NormalizedChatRequest } from './types.js';
+
+export { estimateTokens };
 
 export interface MockProviderOptions {
   /** Delay between streamed chunks in ms. */
   chunkDelayMs?: number;
   /** Fail before streaming anything, e.g. to exercise fallback. */
-  failWith?: { code: string; message: string; retryable: boolean };
-}
-
-/** Rough, deterministic token estimate used only by the mock (≈ 4 characters per token). */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  failWith?: { code: string; message: string; retryable: boolean; status?: number };
+  /** Fail after this many words have been streamed (a dropped connection). */
+  failAfterWords?: number;
 }
 
 const sleep = (ms: number, signal?: AbortSignal) =>
@@ -32,6 +32,7 @@ const sleep = (ms: number, signal?: AbortSignal) =>
  */
 export class MockProvider implements LLMProvider {
   readonly id = 'mock' as const;
+  readonly transport = 'direct' as const;
 
   constructor(private readonly options: MockProviderOptions = {}) {}
 
@@ -48,6 +49,7 @@ export class MockProvider implements LLMProvider {
 
     let emitted = '';
     let stopReason: 'end' | 'max_tokens' | 'cancelled' = 'end';
+    let count = 0;
     for (const word of words) {
       if (signal?.aborted) {
         stopReason = 'cancelled';
@@ -57,17 +59,30 @@ export class MockProvider implements LLMProvider {
         stopReason = 'max_tokens';
         break;
       }
+      if (this.options.failAfterWords !== undefined && count >= this.options.failAfterWords) {
+        yield usage(inputTokens, emitted);
+        yield {
+          type: 'error',
+          code: 'unavailable',
+          message: 'mock: kết nối bị ngắt',
+          retryable: true,
+        };
+        return;
+      }
       emitted += word;
+      count += 1;
       yield { type: 'text', delta: word };
       await sleep(this.options.chunkDelayMs ?? 0, signal);
     }
 
-    yield {
-      type: 'usage',
-      inputTokens,
-      outputTokens: estimateTokens(emitted),
-      cachedInputTokens: 0,
-    };
+    yield usage(inputTokens, emitted);
     yield { type: 'done', stopReason };
   }
 }
+
+const usage = (inputTokens: number, emitted: string): ChatChunk => ({
+  type: 'usage',
+  inputTokens,
+  outputTokens: estimateTokens(emitted),
+  cachedInputTokens: 0,
+});

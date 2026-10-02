@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-router';
 import { DepartmentsPage } from './admin/DepartmentsPage';
 import { DirectoryPage } from './admin/DirectoryPage';
+import { ModelsPage } from './admin/ModelsPage';
+import { ProvidersPage } from './admin/ProvidersPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AccountPanel } from './components/AccountPanel';
 import { ApiStatus } from './components/ApiStatus';
@@ -10,12 +12,23 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 
 const PEOPLE_ADMINS: Role[] = ['super_admin', 'auditor', 'unit_admin'];
 const DEPARTMENT_VIEWERS: Role[] = ['super_admin', 'auditor', 'unit_admin', 'ai_admin'];
+const REGISTRY_VIEWERS: Role[] = ['super_admin', 'ai_admin', 'auditor'];
+const REGISTRY_EDITORS: Role[] = ['super_admin', 'ai_admin'];
 
 export const ADMIN_PATHS = {
   directory: '/quan-tri/can-bo',
   accounts: '/quan-tri/tai-khoan',
   departments: '/quan-tri/don-vi',
+  models: '/quan-tri/mo-hinh',
+  providers: '/quan-tri/nha-cung-cap',
 } as const;
+
+/** First admin page a role may open. */
+function adminHome(role: Role): string {
+  if (PEOPLE_ADMINS.includes(role)) return ADMIN_PATHS.directory;
+  if (REGISTRY_VIEWERS.includes(role)) return ADMIN_PATHS.models;
+  return ADMIN_PATHS.departments;
+}
 
 function Home() {
   const { user, profile, signIn, signInWithPassword, signOut } = useAuth();
@@ -32,10 +45,7 @@ function Home() {
           onSignOut={signOut}
         />
         {role && DEPARTMENT_VIEWERS.includes(role) && (
-          <Link
-            to={PEOPLE_ADMINS.includes(role) ? ADMIN_PATHS.directory : ADMIN_PATHS.departments}
-            className="mt-3 inline-block text-sm text-sky-800 underline"
-          >
+          <Link to={adminHome(role)} className="mt-3 inline-block text-sm text-sky-800 underline">
             Trang quản trị
           </Link>
         )}
@@ -81,6 +91,16 @@ function AdminRoute({ roles, children }: { roles: Role[]; children: (role: Role)
         <NavLink to={ADMIN_PATHS.departments} className={tabClass}>
           Đơn vị
         </NavLink>
+        {REGISTRY_VIEWERS.includes(role) && (
+          <>
+            <NavLink to={ADMIN_PATHS.models} className={tabClass}>
+              Model &amp; giá
+            </NavLink>
+            <NavLink to={ADMIN_PATHS.providers} className={tabClass}>
+              Nhà cung cấp AI
+            </NavLink>
+          </>
+        )}
       </nav>
       {children(role)}
     </section>
@@ -135,8 +155,30 @@ function AdminPages() {
           </AdminRoute>
         }
       />
+      <Route
+        path="mo-hinh"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => <ModelsPage canEdit={REGISTRY_EDITORS.includes(role)} getToken={getToken} />}
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="nha-cung-cap"
+        element={
+          <AdminRoute roles={REGISTRY_VIEWERS}>
+            {(role) => (
+              <ProvidersPage
+                canEdit={REGISTRY_EDITORS.includes(role)}
+                canSetKey={role === 'super_admin'}
+                getToken={getToken}
+              />
+            )}
+          </AdminRoute>
+        }
+      />
       <Route path="nguoi-dung" element={<Navigate to={ADMIN_PATHS.accounts} replace />} />
-      <Route path="*" element={<Navigate to={ADMIN_PATHS.directory} replace />} />
+      <Route path="*" element={<Navigate to={me ? adminHome(me.role) : '/'} replace />} />
     </Routes>
   );
 }
@@ -160,7 +202,7 @@ export function App() {
             <Route path="/quan-tri/*" element={<AdminPages />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <footer className="text-xs text-slate-400">Bản phát triển – milestone M3</footer>
+          <footer className="text-xs text-slate-400">Bản phát triển – milestone M4</footer>
         </main>
       </BrowserRouter>
     </AuthProvider>

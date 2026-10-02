@@ -6,3 +6,5 @@ export * from './users.js';
 export * from './departments.js';
 export * from './audit.js';
 export * from './testing.js';
+export * from './registry.js';
+export * from './registry-catalog.js';
