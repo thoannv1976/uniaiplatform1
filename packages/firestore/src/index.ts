@@ -8,3 +8,5 @@ export * from './audit.js';
 export * from './testing.js';
 export * from './registry.js';
 export * from './registry-catalog.js';
+export * from './conversations.js';
+export * from './usage.js';

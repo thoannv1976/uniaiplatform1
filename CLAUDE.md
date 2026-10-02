@@ -19,7 +19,7 @@ Nền tảng AI đa mô hình (OpenAI, Gemini, Claude) cho cán bộ, giảng vi
 - `apps/worker` – NestJS → Cloud Run `uniai-worker` (local: cổng 8081)
 - `packages/shared` – schema Zod, tiền tệ micro-USD, vai trò (dùng chung web + server)
 - `packages/firestore` – firebase-admin, tên collection, seed, `UserStore`, `DepartmentStore`, `AuditStore`,
-  `RegistryStore` (providers/models/prices) + danh mục model mẫu
+  `RegistryStore` (providers/models/prices) + danh mục model mẫu, `ConversationStore`, `UsageStore` (sổ cái)
 - `packages/ai-providers` – interface `LLMProvider`; adapter OpenAI (Responses API), Gemini và Claude (direct/Vertex AI),
   `MockProvider`; `SecretStore` (Secret Manager); contract test chạy bằng HTTP ghi sẵn (`src/testing/`)
 
@@ -43,6 +43,9 @@ Packages build ra `dist/` (ESM); chạy `pnpm build` trước khi typecheck/test
 
 - Web KHÔNG gọi trực tiếp nhà cung cấp AI và KHÔNG truy cập trực tiếp Firestore; mọi thứ qua `apps/api`.
   `firestore.rules` và `storage.rules` luôn là deny-all.
+- Chat: `POST /api/ai/chat` trả SSE (schema `packages/shared/src/chat.ts`), web gọi thẳng URL Cloud Run (không qua
+  rewrite Hosting – giới hạn 60 giây). Mọi câu trả lời có token phải ghi `usageTransactions`, kể cả khi hủy (ADR 0005).
+- Hội thoại chỉ chủ sở hữu đọc được qua API; quản trị viên không xem nội dung hội thoại của người khác.
 - Tiền: số nguyên micro-USD, chỉ dùng `packages/shared/src/money.ts`. Không dùng số thực cho tiền.
 - Trừ định mức chỉ qua QuotaService (Firestore transaction); không ghi vào `budgetPeriods` theo từng yêu cầu.
 - Không đọc/ghi API key ngoài module providers; không log key hay dữ liệu DLP. Key chỉ nằm trong Secret Manager

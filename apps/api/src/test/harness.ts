@@ -1,5 +1,11 @@
 import { Controller, Get, type INestApplication } from '@nestjs/common';
-import { MemorySecretStore, MockProvider, type ProviderConnection } from '@uniai/ai-providers';
+import {
+  MemorySecretStore,
+  MockProvider,
+  type LLMProvider,
+  type NormalizedChatRequest,
+  type ProviderConnection,
+} from '@uniai/ai-providers';
 import { AuditStore, clearFirestoreEmulator, getDb, seed, UserStore } from '@uniai/firestore';
 import type { Role, UserStatus } from '@uniai/shared';
 import request from 'supertest';
@@ -44,6 +50,8 @@ export async function startApp(env: Record<string, string> = {}) {
   const secrets = new MemorySecretStore();
   /** Every adapter the API built, with the key it was given; all of them are mocks. */
   const connections: ProviderConnection[] = [];
+  /** Every request the gateway sent to a provider. */
+  const requests: NormalizedChatRequest[] = [];
   const app = await createApp(
     loadConfig({
       ALLOWED_EMAIL_DOMAINS: 'ftu.edu.vn',
@@ -58,16 +66,24 @@ export async function startApp(env: Record<string, string> = {}) {
         tokenVerifier: fakeVerifier,
         identityAdmin: identity,
         secretStore: secrets,
-        providerFactory: (c) => {
+        providerFactory: (c): LLMProvider => {
           connections.push(c);
-          return new MockProvider();
+          const mock = new MockProvider();
+          return {
+            id: c.id,
+            transport: c.transport,
+            stream: (req, signal) => {
+              requests.push(req);
+              return mock.stream(req, signal);
+            },
+          };
         },
         extraControllers: [UnguardedTestController],
       },
     },
   );
   await app.init();
-  return { app, identity, secrets, connections };
+  return { app, identity, secrets, connections, requests };
 }
 
 export const users = () => new UserStore(getDb());

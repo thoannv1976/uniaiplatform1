@@ -20,6 +20,8 @@ export interface AppConfig {
   mockProviderEnabled: boolean;
   /** Keep API keys in memory instead of Secret Manager (emulator and tests only). */
   inMemorySecrets: boolean;
+  /** Conversation content is deleted this many days after it was written (decision D8). */
+  conversationRetentionDays: number;
 }
 
 export function emailPolicy(config: AppConfig): EmailPolicy {
@@ -48,7 +50,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     vertexLocation: env.VERTEX_LOCATION ?? 'global',
     mockProviderEnabled: parseFlag(env.ENABLE_MOCK_PROVIDER, emulator),
     inMemorySecrets: emulator,
+    conversationRetentionDays: parseRetention(env.CONVERSATION_RETENTION_DAYS),
   };
+}
+
+function parseRetention(value: string | undefined): number {
+  if (value === undefined || value === '') return 180;
+  const days = Number(value);
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new Error(`CONVERSATION_RETENTION_DAYS không hợp lệ: ${value}`);
+  }
+  return days;
 }
 
 function parseFlag(value: string | undefined, fallback: boolean): boolean {

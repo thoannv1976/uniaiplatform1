@@ -62,6 +62,9 @@ jobs:
 
       - name: Emulator tests (Auth, Firestore, Storage, security rules)
         run: pnpm test:emulator
+        env:
+          # Plan M5: a chat stream longer than 60 s must not be cut (adds ~1 minute).
+          LONG_STREAM_TEST: '1'
 
       - name: Install Playwright Chromium
         run: pnpm --filter @uniai/web exec playwright install --with-deps chromium
